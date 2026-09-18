@@ -1,6 +1,7 @@
 import { parseBc3 } from '../domain/bc3/parser';
 import { normalizeTokens, rankCandidates } from '../domain/search';
 import type { ItemRef } from '../domain/catalog';
+import { countSkippedRecords } from '../domain/importDiagnostics';
 import type { CatalogRepository, ClockPort, SelectedSource, SourceFilePort } from './ports';
 
 export type ApplicationErrorCode = 'fatal-read' | 'fatal-parse' | 'fatal-storage';
@@ -27,7 +28,7 @@ export class ImportApprovedSource {
       source: snapshot.source, sourceDisplayName: snapshot.sourceDisplayName,
       importedPartidas: snapshot.items.filter((item) => item.kind === 'partida').length,
       importedResources: snapshot.items.filter((item) => item.kind === 'resource').length,
-      skippedRecords: snapshot.diagnostics.length, diagnostics: snapshot.diagnostics,
+      skippedRecords: countSkippedRecords(snapshot.diagnostics), diagnostics: snapshot.diagnostics,
       completedAt: this.clock.nowIso(),
     };
   }

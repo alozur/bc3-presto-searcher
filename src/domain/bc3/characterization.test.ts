@@ -17,4 +17,12 @@ describe('bounded BC3 scanner characterization', () => {
     const snapshot = parseBc3(bytes, 'guadalajara-2016-rm', 'Guadalajara2016_r+m.bc3');
     expect(snapshot.items[0].description).toBe('Niño');
   });
+  it('keeps unresolved child context and physical decomposition line', () => {
+    const source = '~C|P1|u|Parent|1|x|0|\n~D|P1|M1\\\\1\\\\1\\\\M2\\\\1\\\\1|\n';
+    const snapshot = parseBc3(new TextEncoder().encode(`header\n\n${source}`), 'guadalajara-2016-eu', 'synthetic.bc3');
+    expect(snapshot.diagnostics.filter((x) => x.code === 'unresolved-child')).toMatchObject([
+      { parentCode: 'P1', childCode: 'M1', recordTag: 'D', line: 4 },
+      { parentCode: 'P1', childCode: 'M2', recordTag: 'D', line: 4 },
+    ]);
+  });
 });
