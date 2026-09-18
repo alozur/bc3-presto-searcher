@@ -1,0 +1,2 @@
+import type { DecimalText } from './catalog';
+export function parseDecimalText(value:string): DecimalText { const s=value.trim().replace(',','.'); if(!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s)) throw new Error('invalid decimal'); const sign=s.startsWith('-')?'-':''; const body=s.replace(/^[+-]/,''); let [a,b='']=body.split('.'); a=a.replace(/^0+(?=\d)/,'')||'0'; b=b.replace(/0+$/,''); return sign+(b?`${a}.${b}`:a); }

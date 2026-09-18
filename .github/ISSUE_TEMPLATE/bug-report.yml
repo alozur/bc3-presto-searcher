@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible problem in BC3 Presto Searcher.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: Briefly describe what went wrong.
+      placeholder: A concise description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest steps that reproduce the issue.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe the result you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what happened instead. Include errors or screenshots when helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: bc3-context
+    attributes:
+      label: BC3 or sample context
+      description: Identify the BC3 file, sample data, search term, or minimal example involved. Do not include sensitive data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include app version, operating system, and relevant runtime details.
+      placeholder: |
+        App version:
+        Operating system:
+        Runtime details:
+    validations:
+      required: true

@@ -1,0 +1,5 @@
+~C|SYN-ASM-001|u|Synthetic assembly Ÿ|99.50|x|0|
+~C|SYN-LAB-001|h|Synthetic labor|25.00|x|0|
+~C|SYN-MAT-002|kg|Synthetic material|3.50|x|0|
+~C|SYN-TOOL-003|u|Synthetic tool|12.00|x|0|
+~D|SYN-ASM-001|SYN-LAB-001\1\0.5\SYN-MAT-002\2\1.25\SYN-TOOL-003\1\0.1|

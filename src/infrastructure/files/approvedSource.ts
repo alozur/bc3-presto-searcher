@@ -1,0 +1,2 @@
+import {readFile} from 'node:fs/promises'; import {basename} from 'node:path'; import {admitSource} from '../../domain/source'; import type {SelectedSource} from '../../application/ports';
+export async function readApprovedFile(filePath:string):Promise<SelectedSource>{const displayName=basename(filePath);const source=admitSource(displayName);if(!source)throw new Error('unsupported-source');return {source,displayName,bytes:await readFile(filePath)};}

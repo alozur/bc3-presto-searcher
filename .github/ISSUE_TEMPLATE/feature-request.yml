@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest a UI or product improvement for BC3 Presto Searcher.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem-impact
+    attributes:
+      label: Problem and user impact
+      description: Explain the user problem and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-behavior
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired UI or product behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List the observable outcomes that would make this request complete.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds, alternative approaches, or why none are suitable.
+    validations:
+      required: true
