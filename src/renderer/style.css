@@ -10,3 +10,9 @@ input { min-width: 18rem; border: 1px solid #94a3b8; border-radius: .25rem; }
 .results p { margin: .35rem 0; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: .5rem; text-align: left; border-bottom: 1px solid #d8dee8; }
+.import-diagnostics-panel {
+  max-height: 12rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}

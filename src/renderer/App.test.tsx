@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -65,6 +66,47 @@ describe('Presto catalog screen', () => {
     expect(container.textContent).toContain('Recurso');
     await act(async () => click(container.querySelector('button[aria-label="Ver detalle E11XM020"]')!));
     expect(container.textContent).toContain('Desglose de E11XM020');
+  });
+
+  it('keeps import summaries visible while diagnostics scroll independently', async () => {
+    const diagnostics = [
+      { code: 'ignored-record', sourceDisplayName: 'short.bc3', line: 4, messageEs: 'Registro omitido.' },
+      { code: 'ignored-record', sourceDisplayName: 'a-very-long-filename-that-must-remain-readable-without-horizontal-scrolling.bc3', line: 8, messageEs: 'Este mensaje de diagnóstico también es deliberadamente largo y debe conservarse completo.' },
+      ...Array.from({ length: 8 }, (_, index) => ({ code: 'ignored-record', sourceDisplayName: `file-${index}.bc3`, line: index + 10, messageEs: `Diagnóstico ${index}.` })),
+    ];
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 12, importedResources: 34, skippedRecords: diagnostics.length, diagnostics, completedAt: '2025-01-01T00:00:00.000Z' })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]')!));
+
+    const status = container.querySelector('div[role="status"]')!;
+    const panel = status.querySelector('section.import-diagnostics-panel[aria-label="Panel de diagnósticos de importación"]')!;
+    const list = panel.querySelector('ul[aria-label="Diagnósticos de importación"]')!;
+    const summaries = Array.from(status.children).filter((child): child is HTMLParagraphElement => child.tagName === 'P');
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0].textContent).toContain('catalog.bc3');
+    expect(summaries[0].textContent).toContain('12 partidas y 34 recursos importados');
+    expect(summaries[1].textContent).toContain(`Registros omitidos: ${diagnostics.length}`);
+    expect(summaries[1].textContent).toContain(new Date('2025-01-01T00:00:00.000Z').toLocaleString('es-ES'));
+    expect(summaries.every((summary) => !panel.contains(summary))).toBe(true);
+    expect(Array.from(panel.children)).toEqual([list]);
+    expect((panel as HTMLElement).tabIndex).toBe(0);
+    expect(Array.from(list.children).map((item) => item.textContent)).toEqual(diagnostics.map((diagnostic) => `${diagnostic.sourceDisplayName}, línea ${diagnostic.line}: ${diagnostic.messageEs}`));
+    expect(list.textContent).toContain('a-very-long-filename-that-must-remain-readable-without-horizontal-scrolling.bc3');
+    expect(list.textContent).toContain('Este mensaje de diagnóstico también es deliberadamente largo y debe conservarse completo.');
+
+    const rendererCss = readFileSync('src/renderer/style.css', 'utf8');
+    const panelRule = rendererCss.match(/\.import-diagnostics-panel\s*\{([^}]*)\}/)?.[1];
+    expect(panelRule).toBeDefined();
+    expect(panelRule).toMatch(/max-height:\s*12rem;/);
+    expect(panelRule).toMatch(/overflow-y:\s*auto;/);
+    expect(panelRule).toMatch(/overflow-x:\s*hidden;/);
+    expect(panelRule).toMatch(/overflow-wrap:\s*anywhere;/);
   });
 
   it('shows worker import state while search remains available', async () => {
