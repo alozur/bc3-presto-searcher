@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { ItemDetail, SearchResponse } from '../domain/catalog';
+import { useEffect, useRef, useState } from 'react';
+import type { ItemDetail, ItemRef, SearchResponse } from '../domain/catalog';
 import type { ImportProgress, ImportResponse, PrestoApi } from '../shared/ipc';
 
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
@@ -14,22 +14,53 @@ function progressMessage(progress: ImportProgress | null) {
   return 'Esperando la selección del archivo BC3.';
 }
 
+function itemIdentity(ref: ItemRef) {
+  return JSON.stringify([ref.source, ref.codeKey]);
+}
+
+function resultIds(ref: ItemRef) {
+  const suffix = encodeURIComponent(itemIdentity(ref));
+  return { button: `result-trigger-${suffix}`, detail: `result-detail-${suffix}` };
+}
+
+function ResultDetail({ detail, id, labelledBy }: { detail: ItemDetail; id: string; labelledBy: string }) {
+  return <section className="result-detail" id={id} aria-labelledby={labelledBy}>
+    <h3>{detail.kind === 'partida' ? `Desglose de ${detail.item.code}` : `Detalle de ${detail.item.code}`}</h3>
+    <p>{detail.item.description}</p>
+    <p>Fuente: {detail.item.sourceDisplayName} · {detail.item.unit} · {detail.item.price}</p>
+    {detail.kind === 'partida' && <table>
+      <thead><tr><th>Orden</th><th>Componente</th><th>Tipo</th><th>Factor</th><th>Rendimiento</th></tr></thead>
+      <tbody>{detail.breakdown.map((line) => <tr key={line.ordinal}>
+        <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{line.component.kind === 'partida' ? 'Partida' : 'Recurso'}</td><td>{line.factor}</td><td>{line.yield}</td>
+      </tr>)}</tbody>
+    </table>}
+  </section>;
+}
+
 export function App() {
   const [query, setQuery] = useState('');
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
   const [importResult, setImportResult] = useState<ImportResponse | null>(null);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importing, setImporting] = useState(false);
+  const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
+  const detailRequestVersion = useRef(0);
   const [message, setMessage] = useState<string | null>(null);
   const api = (window as RendererWindow).presto;
 
   useEffect(() => api?.onImportProgress(setImportProgress), [api]);
 
+  function clearDetailSelection() {
+    detailRequestVersion.current += 1;
+    setSelectedIdentity(null);
+    setDetail(null);
+  }
+
   async function importCatalog() {
     if (!api) return setMessage('La aplicación de escritorio no está disponible.');
     setMessage(null);
-    setDetail(null);
+    clearDetailSelection();
     setImportResult(null);
     setImportProgress(null);
     setImporting(true);
@@ -44,7 +75,7 @@ export function App() {
 
   async function search() {
     const trimmed = query.trim();
-    setDetail(null);
+    clearDetailSelection();
     if (!trimmed) {
       setSearchResult({ status: 'empty-query' });
       return;
@@ -59,13 +90,25 @@ export function App() {
   }
 
   async function openDetail(source: Parameters<PrestoApi['getDetail']>[0]) {
+    const identity = itemIdentity(source);
+    if (identity === selectedIdentity) return clearDetailSelection();
     if (!api) return setMessage('La aplicación de escritorio no está disponible.');
+    const version = ++detailRequestVersion.current;
+    setSelectedIdentity(identity);
+    setDetail(null);
     setMessage(null);
     try {
       const result = await api.getDetail(source);
+      if (version !== detailRequestVersion.current) return;
+      if (!result || itemIdentity(result.item.ref) !== identity) {
+        clearDetailSelection();
+        if (!result) setMessage('El elemento ya no está disponible en el catálogo.');
+        return;
+      }
       setDetail(result);
-      if (!result) setMessage('El elemento ya no está disponible en el catálogo.');
     } catch {
+      if (version !== detailRequestVersion.current) return;
+      clearDetailSelection();
       setMessage('No se pudo abrir el detalle del elemento.');
     }
   }
@@ -103,28 +146,23 @@ export function App() {
       {searchResult?.status === 'ok' && <>
         <p>{searchResult.items.length} resultados.</p>
         <ul className="results" aria-label="Resultados de búsqueda">
-          {searchResult.items.map((item) => <li key={`${item.ref.source}-${item.ref.codeKey}`}>
-            <button aria-label={`Ver detalle ${item.code}`} onClick={() => void openDetail(item.ref)}>
-              <strong>{item.kind === 'partida' ? 'Partida' : 'Recurso'}</strong> {item.code}
-            </button>
-            <p>{item.description}</p>
-            <small>{item.unit} · {item.price} · Fuente: {item.sourceDisplayName}</small>
-          </li>)}
+          {searchResult.items.map((item) => {
+            const identity = itemIdentity(item.ref);
+            const ids = resultIds(item.ref);
+            const visibleDetail = selectedIdentity === identity && detail && itemIdentity(detail.item.ref) === identity ? detail : null;
+            return <li key={identity}>
+              <button id={ids.button} aria-expanded={selectedIdentity === identity} aria-controls={ids.detail} aria-label={`Ver detalle ${item.code}`} onClick={() => void openDetail(item.ref)}>
+                <strong>{item.kind === 'partida' ? 'Partida' : 'Recurso'}</strong> {item.code}
+              </button>
+              <p>{item.description}</p>
+              <small>{item.unit} · {item.price} · Fuente: {item.sourceDisplayName}</small>
+              {visibleDetail && <ResultDetail detail={visibleDetail} id={ids.detail} labelledBy={ids.button} />}
+            </li>;
+          })}
         </ul>
       </>}
     </section>
 
-    {detail && <section aria-labelledby="detail-title">
-      <h2 id="detail-title">{detail.kind === 'partida' ? `Desglose de ${detail.item.code}` : `Detalle de ${detail.item.code}`}</h2>
-      <p>{detail.item.description}</p>
-      <p>Fuente: {detail.item.sourceDisplayName} · {detail.item.unit} · {detail.item.price}</p>
-      {detail.kind === 'partida' && <table>
-        <thead><tr><th>Orden</th><th>Componente</th><th>Tipo</th><th>Factor</th><th>Rendimiento</th></tr></thead>
-        <tbody>{detail.breakdown.map((line) => <tr key={line.ordinal}>
-          <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{line.component.kind === 'partida' ? 'Partida' : 'Recurso'}</td><td>{line.factor}</td><td>{line.yield}</td>
-        </tr>)}</tbody>
-      </table>}
-    </section>}
     {message && <p role="alert">{message}</p>}
   </main>;
 }
