@@ -84,11 +84,13 @@ export function App() {
       {importResult && imported(importResult) && <div role="status">
         <p><strong>{importResult.sourceDisplayName}</strong>: {importResult.importedPartidas} partidas y {importResult.importedResources} recursos importados.</p>
         <p>Registros omitidos: {importResult.skippedRecords}. Importado: {new Date(importResult.completedAt).toLocaleString('es-ES')}.</p>
-        {importResult.diagnostics.length > 0 && <ul aria-label="Diagnósticos de importación">
-          {importResult.diagnostics.map((diagnostic, index) => <li key={`${diagnostic.code}-${diagnostic.line}-${index}`}>
-            {diagnostic.sourceDisplayName}, línea {diagnostic.line}: {diagnostic.messageEs}
-          </li>)}
-        </ul>}
+        {importResult.diagnostics.length > 0 && <section className="import-diagnostics-panel" aria-label="Panel de diagnósticos de importación" tabIndex={0}>
+          <ul aria-label="Diagnósticos de importación">
+            {importResult.diagnostics.map((diagnostic, index) => <li key={`${diagnostic.code}-${diagnostic.line}-${index}`}>
+              {diagnostic.sourceDisplayName}, línea {diagnostic.line}: {diagnostic.messageEs}
+            </li>)}
+          </ul>
+        </section>}
       </div>}
     </section>
 
