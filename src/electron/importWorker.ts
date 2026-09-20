@@ -2,6 +2,7 @@ import { parentPort } from 'node:worker_threads';
 import type { SelectedSource } from '../application/ports';
 import { parseBc3 } from '../domain/bc3/parser';
 import { SqliteCatalogRepository } from '../infrastructure/sqlite/repository';
+import { countSkippedRecords } from '../domain/importDiagnostics';
 
 const port = parentPort;
 if (!port) throw new Error('BC3 import worker requires a parent port');
@@ -24,7 +25,7 @@ port.on('message', async ({ databasePath, selected }: ImportRequest) => {
         sourceDisplayName: snapshot.sourceDisplayName,
         importedPartidas: snapshot.items.filter((item) => item.kind === 'partida').length,
         importedResources: snapshot.items.filter((item) => item.kind === 'resource').length,
-        skippedRecords: snapshot.diagnostics.length,
+        skippedRecords: countSkippedRecords(snapshot.diagnostics),
         diagnostics: snapshot.diagnostics,
         completedAt: new Date().toISOString(),
       },
