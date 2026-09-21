@@ -210,10 +210,14 @@ describe('Presto catalog screen', () => {
     await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
   }
 
-  it('renders inline productivity, preserves breakdown order, and keeps resources table-free', async () => {
-    const partida = item('guadalajara-2016-eu', 'p1', 'P1');
+  it('renders unit-aware breakdown quantities in source order and keeps resources table-free', async () => {
+    const partida = { ...item('guadalajara-2016-eu', 'p1', 'P1'), unit: 'm2' };
     const resource = item('guadalajara-2016-eu', 'r1', 'R1', 'resource');
-    const details = new Map<string, ItemDetail>([[partida.ref.codeKey, partidaDetail(partida)], [resource.ref.codeKey, { kind: 'resource', item: resource }]]);
+    const breakdown = [
+      { ordinal: 1, sourceLine: 9, component: { code: 'C2', kind: 'resource' as const, description: 'Labor', unit: 'h', unitPrice: '2' }, factor: 'ignored', yield: '0.3' },
+      { ordinal: 0, sourceLine: 2, component: { code: 'C1', kind: 'partida' as const, description: 'Material', unit: 'm2', unitPrice: '1' }, factor: 'ignored', yield: '1.05' },
+    ];
+    const details = new Map<string, ItemDetail>([[partida.ref.codeKey, partidaDetail(partida, breakdown)], [resource.ref.codeKey, { kind: 'resource', item: resource }]]);
     const api = apiFor({ status: 'ok', items: [partida, resource] }, vi.fn(async (ref) => details.get(ref.codeKey) ?? null));
     await showResults(api);
     const partidaButton = container.querySelector('button[aria-label="Ver detalle P1"]')!;
@@ -225,11 +229,11 @@ describe('Presto catalog screen', () => {
     expect(container.querySelector('ul[aria-label="Resultados de búsqueda"]')?.contains(region)).toBe(true);
     expect(row.lastElementChild).toBe(region);
     const headers = [...region.querySelectorAll('th')];
-    expect(headers.map((cell) => cell.textContent)).toEqual(['Orden', 'Componente', 'Tipo', 'Factor', 'h / m²', 'm² / 8 h']);
-    expect(headers[4].getAttribute('title')).toBe('Horas necesarias por metro cuadrado');
-    expect(headers[5].getAttribute('title')).toBe('Metros cuadrados realizables en ocho horas');
+    expect(headers.map((cell) => cell.textContent)).toEqual(['Orden', 'Componente', 'Hora/Unidad', 'Unidad/Día']);
+    expect(headers[2].getAttribute('title')).toBe('Horas o cantidad del componente requeridas por unidad de la partida.');
+    expect(headers[3].getAttribute('title')).toBe('Unidades de la partida por día, calculadas al mostrar como 8 dividido por Hora/Unidad para una jornada fija de 8 horas.');
     expect(region.querySelector('[role="tooltip"]')).toBeNull();
-    expect([...region.querySelectorAll('tbody tr')].map((line) => [...line.children].map((cell) => cell.textContent))).toEqual([['2', 'C2 — Second', 'Recurso', 'F2', '0.3', '26,67'], ['1', 'C1 — First', 'Partida', 'F1', '0', '—']]);
+    expect([...region.querySelectorAll('tbody tr')].map((line) => [...line.children].map((cell) => cell.textContent))).toEqual([['2', 'C2 — Labor', '0,3 h', '26,67 m2/día'], ['1', 'C1 — Material', '1,05 m2', 'No aplica']]);
     await act(async () => click(container.querySelector('button[aria-label="Ver detalle R1"]')!));
     const resourceRegion = container.querySelector('button[aria-label="Ver detalle R1"]')!.closest('li')!.querySelector('section.result-detail')!;
     expect(resourceRegion.querySelector('table')).toBeNull();

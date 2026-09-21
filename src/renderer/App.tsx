@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ItemDetail, ItemRef, SearchResponse } from '../domain/catalog';
 import type { ImportProgress, ImportResponse, PrestoApi } from '../shared/ipc';
-import { formatEightHourProductivity } from './productivity';
+import { presentBreakdownQuantity } from './productivity';
 
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
 
@@ -34,10 +34,17 @@ function ResultDetail({ detail, id, labelledBy }: { detail: ItemDetail; id: stri
     <p>{detail.item.description}</p>
     <p>Fuente: {detail.item.sourceDisplayName} · {detail.item.unit} · {detail.item.price}</p>
     {detail.kind === 'partida' && <table>
-      <thead><tr><th>Orden</th><th>Componente</th><th>Tipo</th><th>Factor</th><th title="Horas necesarias por metro cuadrado">h / m²</th><th title="Metros cuadrados realizables en ocho horas">m² / 8 h</th></tr></thead>
-      <tbody>{detail.breakdown.map((line) => <tr key={line.ordinal}>
-        <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{line.component.kind === 'partida' ? 'Partida' : 'Recurso'}</td><td>{line.factor}</td><td>{line.yield}</td><td>{formatEightHourProductivity(line.yield)}</td>
-      </tr>)}</tbody>
+      <thead><tr><th>Orden</th><th>Componente</th><th title="Horas o cantidad del componente requeridas por unidad de la partida.">Hora/Unidad</th><th title="Unidades de la partida por día, calculadas al mostrar como 8 dividido por Hora/Unidad para una jornada fija de 8 horas.">Unidad/Día</th></tr></thead>
+      <tbody>{detail.breakdown.map((line) => {
+        const presentation = presentBreakdownQuantity({
+          yieldText: line.yield,
+          componentUnit: line.component.unit,
+          parentUnit: detail.item.unit,
+        });
+        return <tr key={line.ordinal}>
+          <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{presentation.source}</td><td>{presentation.daily}</td>
+        </tr>;
+      })}</tbody>
     </table>}
   </section>;
 }
