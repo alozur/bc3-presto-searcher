@@ -3,7 +3,20 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 type PackageConfiguration = {
+  build: {
+    appId: string;
+    asarUnpack: string[];
+    productName: string;
+    win: {
+      artifactName: string;
+      target: string;
+    };
+  };
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
   main: string;
+  name: string;
+  packageManager: string;
   scripts: Record<string, string>;
 };
 
@@ -21,6 +34,34 @@ const packageConfiguration = JSON.parse(
 const typeScriptConfiguration = JSON.parse(
   readFileSync(path.join(projectRoot, 'tsconfig.json'), 'utf8'),
 ) as TypeScriptConfiguration;
+const lockfile = readFileSync(path.join(projectRoot, 'pnpm-lock.yaml'), 'utf8');
+
+function importerSpecifier(group: 'dependencies' | 'devDependencies', dependency: string) {
+  const rootImporter = lockfile.slice(0, lockfile.indexOf('\npackages:'));
+  const groupStart = rootImporter.indexOf(`    ${group}:\n`);
+
+  if (groupStart === -1) {
+    return undefined;
+  }
+
+  const followingGroup = rootImporter.slice(groupStart + 1).search(/\n    \S/);
+  const groupContents = rootImporter.slice(
+    groupStart,
+    followingGroup === -1 ? undefined : groupStart + followingGroup + 1,
+  );
+  const entry = groupContents.match(
+    new RegExp(`^      ${dependency}:\\n        specifier: ([^\\n]+)$`, 'm'),
+  );
+
+  return entry?.[1];
+}
+
+function workflowJob(workflow: string, jobName: string) {
+  const jobStart = workflow.indexOf(`  ${jobName}:\n`);
+  const followingJob = workflow.slice(jobStart + 1).search(/\n  \S/);
+
+  return workflow.slice(jobStart, followingJob === -1 ? undefined : jobStart + followingJob + 1);
+}
 
 describe('Electron build configuration', () => {
   it('emits the configured main entry directly under dist-electron', () => {
@@ -43,5 +84,60 @@ describe('Electron build configuration', () => {
     expect(packageConfiguration.scripts['electron:start']).toBe(
       'pnpm electron:rebuild && pnpm build && electron .',
     );
+  });
+
+  it('classifies Electron packaging tools as pinned development dependencies in the manifest and root importer', () => {
+    for (const [dependency, version] of [
+      ['electron', '33.2.1'],
+      ['electron-builder', '25.1.8'],
+    ]) {
+      expect(packageConfiguration.dependencies[dependency]).toBeUndefined();
+      expect(packageConfiguration.devDependencies[dependency]).toBe(version);
+      expect(importerSpecifier('dependencies', dependency)).toBeUndefined();
+      expect(importerSpecifier('devDependencies', dependency)).toBe(version);
+    }
+  });
+
+  it('preserves the Linux and Windows delivery contracts', () => {
+    const workflow = readFileSync(path.join(projectRoot, '.github/workflows/ci.yml'), 'utf8');
+    const linuxJob = workflowJob(workflow, 'linux');
+    const windowsJob = workflowJob(workflow, 'windows');
+
+    expect(packageConfiguration.packageManager).toBe('pnpm@9.15.0');
+    expect(linuxJob).toBe(`  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: {version: 9.15.0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test`);
+
+    const requiredWindowsStages = [
+      'pnpm install --frozen-lockfile',
+      'pnpm test',
+      'pnpm electron:build',
+      'uses: actions/upload-artifact@v4',
+    ];
+    const stagePositions = requiredWindowsStages.map((stage) => windowsJob.indexOf(stage));
+
+    expect(stagePositions.every((position) => position !== -1)).toBe(true);
+    expect(stagePositions).toEqual([...stagePositions].sort((left, right) => left - right));
+    expect(windowsJob).toContain('name: PrestoSearch.exe');
+    expect(windowsJob).toContain('path: release/PrestoSearch.exe');
+    expect(windowsJob).toContain('if-no-files-found: error');
+  });
+
+  it('preserves the PrestoSearch package identity', () => {
+    expect(packageConfiguration.name).toBe('bc3-presto-searcher');
+    expect(packageConfiguration.build.appId).toBe('com.alozur.prestosearch');
+    expect(packageConfiguration.build.productName).toBe('PrestoSearch');
+    expect(packageConfiguration.build.win).toEqual({
+      target: 'nsis',
+      artifactName: 'PrestoSearch.exe',
+    });
+    expect(packageConfiguration.build.asarUnpack).toContain('node_modules/better-sqlite3/**');
   });
 });

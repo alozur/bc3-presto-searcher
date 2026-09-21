@@ -14,12 +14,6 @@ importers:
       better-sqlite3:
         specifier: 11.7.0
         version: 11.7.0
-      electron:
-        specifier: 33.2.1
-        version: 33.2.1
-      electron-builder:
-        specifier: 25.1.8
-        version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -39,6 +33,12 @@ importers:
       '@types/react-dom':
         specifier: 18.3.1
         version: 18.3.1
+      electron:
+        specifier: 33.2.1
+        version: 33.2.1
+      electron-builder:
+        specifier: 25.1.8
+        version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       jsdom:
         specifier: 25.0.1
         version: 25.0.1
