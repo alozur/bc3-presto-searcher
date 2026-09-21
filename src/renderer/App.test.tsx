@@ -109,7 +109,7 @@ describe('Presto catalog screen', () => {
     expect(panelRule).toMatch(/overflow-wrap:\s*anywhere;/);
   });
 
-  it('shows worker import state while search remains available', async () => {
+  it('shows complete import activity while search remains available and clears it after success', async () => {
     let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
     let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
     const api: PrestoApi = {
@@ -119,27 +119,83 @@ describe('Presto catalog screen', () => {
       getDetail: vi.fn(async () => null),
     };
     await render(api);
+    const loadingStatus = () => container.querySelector('section[aria-labelledby="import-title"] > p[role="status"]');
+    const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
 
-    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]')!));
-    expect(container.textContent).toContain('Importación en curso');
-    expect((container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement).disabled).toBe(true);
-    await act(async () => reportProgress?.({ phase: 'parsing' }));
-    expect(container.textContent).toContain('Analizando el catálogo BC3');
-
+    await act(async () => click(importButton));
+    expect(loadingStatus()?.textContent).toBe('Importación en curso. Esperando la selección del archivo BC3.');
+    expect(importButton.disabled).toBe(true);
     const input = container.querySelector('input')!;
+    const searchButton = container.querySelector('button[aria-label="Buscar"]') as HTMLButtonElement;
+    expect(input.disabled).toBe(false);
+    expect(searchButton.disabled).toBe(false);
     await act(async () => enterText(input, 'barniz'));
-    await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
+    await act(async () => click(searchButton));
     expect(api.search).toHaveBeenCalledWith({ query: 'barniz' });
 
+    await act(async () => reportProgress?.({ phase: 'parsing' }));
+    expect(loadingStatus()?.textContent).toBe('Importación en curso. Analizando el catálogo BC3.');
+    expect(importButton.disabled).toBe(true);
+    await act(async () => reportProgress?.({ phase: 'storing' }));
+    expect(loadingStatus()?.textContent).toBe('Importación en curso. Guardando el catálogo para buscarlo.');
+    expect(importButton.disabled).toBe(true);
+
     await act(async () => completeImport?.({ source: 'guadalajara-2016-eu', sourceDisplayName: 'Guadalajara2016_e+u.bc3', importedPartidas: 1, importedResources: 3, skippedRecords: 0, diagnostics: [], completedAt: '2025-01-01T00:00:00.000Z' }));
+    expect(loadingStatus()).toBeNull();
+    expect(importButton.disabled).toBe(false);
     expect(container.textContent).toContain('1 partidas y 3 recursos importados');
+    await act(async () => reportProgress?.({ phase: 'parsing' }));
+    expect(loadingStatus()).toBeNull();
+    expect(importButton.disabled).toBe(false);
+  });
+
+  it('clears import activity while preserving cancellation feedback', async () => {
+    let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
+    let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((resolve) => { completeImport = resolve; })),
+      onImportProgress: vi.fn((listener) => { reportProgress = listener; return () => undefined; }),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
+
+    await act(async () => click(importButton));
+    await act(async () => reportProgress?.({ phase: 'parsing' }));
+    await act(async () => completeImport?.({ status: 'cancelled' }));
+
+    expect(container.querySelector('section[aria-labelledby="import-title"] > p[role="status"]')).toBeNull();
+    expect(importButton.disabled).toBe(false);
+    expect(container.textContent).toContain('La importación fue cancelada.');
+  });
+
+  it('clears import activity while preserving rejection feedback', async () => {
+    let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
+    let rejectImport: ((reason?: unknown) => void) | undefined;
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((_resolve, reject) => { rejectImport = reject; })),
+      onImportProgress: vi.fn((listener) => { reportProgress = listener; return () => undefined; }),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
+
+    await act(async () => click(importButton));
+    await act(async () => reportProgress?.({ phase: 'storing' }));
+    await act(async () => rejectImport?.(new Error('failed import')));
+
+    expect(container.querySelector('section[aria-labelledby="import-title"] > p[role="status"]')).toBeNull();
+    expect(importButton.disabled).toBe(false);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo importar el catálogo seleccionado.');
   });
 
   function item(source: 'guadalajara-2016-rm' | 'guadalajara-2016-eu', codeKey: string, code: string, kind: 'partida' | 'resource' = 'partida') {
     return { ref: { source, codeKey }, kind, code, description: `${code} description`, unit: kind === 'partida' ? 'm²' : 'l', price: '12.50', keywords: [], expandedText: code, sourceDisplayName: source, fieldCounts: { code: 1, description: 1, keywords: 0, expandedText: 1 }, exactCode: false } as SearchCandidate;
   }
 
-  function partidaDetail(value: ReturnType<typeof item>, breakdown = [{ ordinal: 1, sourceLine: 9, component: { code: 'C2', kind: 'resource' as const, description: 'Second', unit: 'u', unitPrice: '2' }, factor: 'F2', yield: 'Y2' }, { ordinal: 0, sourceLine: 2, component: { code: 'C1', kind: 'partida' as const, description: 'First', unit: 'u', unitPrice: '1' }, factor: 'F1', yield: 'Y1' }]) {
+  function partidaDetail(value: ReturnType<typeof item>, breakdown = [{ ordinal: 1, sourceLine: 9, component: { code: 'C2', kind: 'resource' as const, description: 'Second', unit: 'u', unitPrice: '2' }, factor: 'F2', yield: '0.3' }, { ordinal: 0, sourceLine: 2, component: { code: 'C1', kind: 'partida' as const, description: 'First', unit: 'u', unitPrice: '1' }, factor: 'F1', yield: '0' }]) {
     return { kind: 'partida' as const, item: value, breakdown };
   }
 
@@ -154,7 +210,7 @@ describe('Presto catalog screen', () => {
     await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
   }
 
-  it('renders inline, preserves breakdown order, and keeps resources table-free', async () => {
+  it('renders inline productivity, preserves breakdown order, and keeps resources table-free', async () => {
     const partida = item('guadalajara-2016-eu', 'p1', 'P1');
     const resource = item('guadalajara-2016-eu', 'r1', 'R1', 'resource');
     const details = new Map<string, ItemDetail>([[partida.ref.codeKey, partidaDetail(partida)], [resource.ref.codeKey, { kind: 'resource', item: resource }]]);
@@ -168,8 +224,12 @@ describe('Presto catalog screen', () => {
     expect(container.querySelectorAll('section.result-detail')).toHaveLength(1);
     expect(container.querySelector('ul[aria-label="Resultados de búsqueda"]')?.contains(region)).toBe(true);
     expect(row.lastElementChild).toBe(region);
-    expect([...region.querySelectorAll('th')].map((cell) => cell.textContent)).toEqual(['Orden', 'Componente', 'Tipo', 'Factor', 'Rendimiento']);
-    expect([...region.querySelectorAll('tbody tr')].map((line) => [...line.children].map((cell) => cell.textContent))).toEqual([['2', 'C2 — Second', 'Recurso', 'F2', 'Y2'], ['1', 'C1 — First', 'Partida', 'F1', 'Y1']]);
+    const headers = [...region.querySelectorAll('th')];
+    expect(headers.map((cell) => cell.textContent)).toEqual(['Orden', 'Componente', 'Tipo', 'Factor', 'h / m²', 'm² / 8 h']);
+    expect(headers[4].getAttribute('title')).toBe('Horas necesarias por metro cuadrado');
+    expect(headers[5].getAttribute('title')).toBe('Metros cuadrados realizables en ocho horas');
+    expect(region.querySelector('[role="tooltip"]')).toBeNull();
+    expect([...region.querySelectorAll('tbody tr')].map((line) => [...line.children].map((cell) => cell.textContent))).toEqual([['2', 'C2 — Second', 'Recurso', 'F2', '0.3', '26,67'], ['1', 'C1 — First', 'Partida', 'F1', '0', '—']]);
     await act(async () => click(container.querySelector('button[aria-label="Ver detalle R1"]')!));
     const resourceRegion = container.querySelector('button[aria-label="Ver detalle R1"]')!.closest('li')!.querySelector('section.result-detail')!;
     expect(resourceRegion.querySelector('table')).toBeNull();

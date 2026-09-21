@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ItemDetail, ItemRef, SearchResponse } from '../domain/catalog';
 import type { ImportProgress, ImportResponse, PrestoApi } from '../shared/ipc';
+import { formatEightHourProductivity } from './productivity';
 
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
+
+type ImportActivity =
+  | { status: 'idle' }
+  | { status: 'pending'; phase: ImportProgress['phase'] | null };
 
 function imported(response: ImportResponse): response is Exclude<ImportResponse, { status: 'cancelled' }> {
   return !('status' in response);
 }
 
-function progressMessage(progress: ImportProgress | null) {
-  if (progress?.phase === 'parsing') return 'Analizando el catálogo BC3.';
-  if (progress?.phase === 'storing') return 'Guardando el catálogo para buscarlo.';
+function progressMessage(phase: ImportProgress['phase'] | null) {
+  if (phase === 'parsing') return 'Analizando el catálogo BC3.';
+  if (phase === 'storing') return 'Guardando el catálogo para buscarlo.';
   return 'Esperando la selección del archivo BC3.';
 }
 
@@ -29,9 +34,9 @@ function ResultDetail({ detail, id, labelledBy }: { detail: ItemDetail; id: stri
     <p>{detail.item.description}</p>
     <p>Fuente: {detail.item.sourceDisplayName} · {detail.item.unit} · {detail.item.price}</p>
     {detail.kind === 'partida' && <table>
-      <thead><tr><th>Orden</th><th>Componente</th><th>Tipo</th><th>Factor</th><th>Rendimiento</th></tr></thead>
+      <thead><tr><th>Orden</th><th>Componente</th><th>Tipo</th><th>Factor</th><th title="Horas necesarias por metro cuadrado">h / m²</th><th title="Metros cuadrados realizables en ocho horas">m² / 8 h</th></tr></thead>
       <tbody>{detail.breakdown.map((line) => <tr key={line.ordinal}>
-        <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{line.component.kind === 'partida' ? 'Partida' : 'Recurso'}</td><td>{line.factor}</td><td>{line.yield}</td>
+        <td>{line.ordinal + 1}</td><td>{line.component.code} — {line.component.description}</td><td>{line.component.kind === 'partida' ? 'Partida' : 'Recurso'}</td><td>{line.factor}</td><td>{line.yield}</td><td>{formatEightHourProductivity(line.yield)}</td>
       </tr>)}</tbody>
     </table>}
   </section>;
@@ -41,15 +46,19 @@ export function App() {
   const [query, setQuery] = useState('');
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
   const [importResult, setImportResult] = useState<ImportResponse | null>(null);
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-  const [importing, setImporting] = useState(false);
+  const [importActivity, setImportActivity] = useState<ImportActivity>({ status: 'idle' });
+  const importing = importActivity.status === 'pending';
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const detailRequestVersion = useRef(0);
   const [message, setMessage] = useState<string | null>(null);
   const api = (window as RendererWindow).presto;
 
-  useEffect(() => api?.onImportProgress(setImportProgress), [api]);
+  useEffect(() => api?.onImportProgress((progress) => {
+    setImportActivity((current) => current.status === 'pending'
+      ? { status: 'pending', phase: progress.phase }
+      : current);
+  }), [api]);
 
   function clearDetailSelection() {
     detailRequestVersion.current += 1;
@@ -62,14 +71,13 @@ export function App() {
     setMessage(null);
     clearDetailSelection();
     setImportResult(null);
-    setImportProgress(null);
-    setImporting(true);
+    setImportActivity({ status: 'pending', phase: null });
     try {
       setImportResult(await api.importApprovedSource());
     } catch {
       setMessage('No se pudo importar el catálogo seleccionado.');
     } finally {
-      setImporting(false);
+      setImportActivity({ status: 'idle' });
     }
   }
 
@@ -122,7 +130,7 @@ export function App() {
     <section aria-labelledby="import-title">
       <h2 id="import-title">Importar catálogo</h2>
       <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
-      {importing && <p role="status">Importación en curso. {progressMessage(importProgress)}</p>}
+      {importing && <p role="status">Importación en curso. {progressMessage(importActivity.phase)}</p>}
       {importResult && !imported(importResult) && <p>La importación fue cancelada.</p>}
       {importResult && imported(importResult) && <div role="status">
         <p><strong>{importResult.sourceDisplayName}</strong>: {importResult.importedPartidas} partidas y {importResult.importedResources} recursos importados.</p>
