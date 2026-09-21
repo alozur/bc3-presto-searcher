@@ -144,6 +144,7 @@ describe('Electron build configuration', () => {
     expect(packageConfiguration.scripts['electron:start']).toBe(
       'pnpm electron:rebuild && pnpm build && electron .',
     );
+    expect(packageConfiguration.scripts['electron:build']).toBe('pnpm build && electron-builder');
   });
 
   it('classifies Electron packaging tools as pinned development dependencies in the manifest and root importer', () => {
