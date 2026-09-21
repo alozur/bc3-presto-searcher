@@ -6,6 +6,9 @@ type PackageConfiguration = {
   build: {
     appId: string;
     asarUnpack: string[];
+    directories: {
+      output: string;
+    };
     productName: string;
     win: {
       artifactName: string;
@@ -144,7 +147,9 @@ describe('Electron build configuration', () => {
     expect(packageConfiguration.scripts['electron:start']).toBe(
       'pnpm electron:rebuild && pnpm build && electron .',
     );
-    expect(packageConfiguration.scripts['electron:build']).toBe('pnpm build && electron-builder');
+    expect(packageConfiguration.scripts['electron:build']).toBe(
+      'pnpm build && electron-builder --publish never',
+    );
   });
 
   it('classifies Electron packaging tools as pinned development dependencies in the manifest and root importer', () => {
@@ -199,6 +204,7 @@ describe('Electron build configuration', () => {
       target: 'nsis',
       artifactName: 'PrestoSearch.exe',
     });
+    expect(packageConfiguration.build.directories.output).toBe('release');
     expect(packageConfiguration.build.asarUnpack).toContain('node_modules/better-sqlite3/**');
   });
 });
