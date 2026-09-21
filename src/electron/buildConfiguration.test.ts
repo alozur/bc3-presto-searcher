@@ -27,6 +27,10 @@ type TypeScriptConfiguration = {
   include: string[];
 };
 
+function normalizeConfigurationText(text: string) {
+  return text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+}
+
 const projectRoot = path.resolve(process.cwd());
 const packageConfiguration = JSON.parse(
   readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
@@ -36,8 +40,13 @@ const typeScriptConfiguration = JSON.parse(
 ) as TypeScriptConfiguration;
 const lockfile = readFileSync(path.join(projectRoot, 'pnpm-lock.yaml'), 'utf8');
 
-function importerSpecifier(group: 'dependencies' | 'devDependencies', dependency: string) {
-  const rootImporter = lockfile.slice(0, lockfile.indexOf('\npackages:'));
+function importerSpecifier(
+  lockfileText: string,
+  group: 'dependencies' | 'devDependencies',
+  dependency: string,
+) {
+  const normalizedLockfile = normalizeConfigurationText(lockfileText);
+  const rootImporter = normalizedLockfile.slice(0, normalizedLockfile.indexOf('\npackages:'));
   const groupStart = rootImporter.indexOf(`    ${group}:\n`);
 
   if (groupStart === -1) {
@@ -56,14 +65,65 @@ function importerSpecifier(group: 'dependencies' | 'devDependencies', dependency
   return entry?.[1];
 }
 
-function workflowJob(workflow: string, jobName: string) {
-  const jobStart = workflow.indexOf(`  ${jobName}:\n`);
-  const followingJob = workflow.slice(jobStart + 1).search(/\n  \S/);
+function workflowJob(workflowText: string, jobName: string) {
+  const normalizedWorkflow = normalizeConfigurationText(workflowText);
+  const jobStart = normalizedWorkflow.indexOf(`  ${jobName}:\n`);
+  const followingJob = normalizedWorkflow.slice(jobStart + 1).search(/\n  \S/);
 
-  return workflow.slice(jobStart, followingJob === -1 ? undefined : jobStart + followingJob + 1);
+  return normalizedWorkflow.slice(
+    jobStart,
+    followingJob === -1 ? undefined : jobStart + followingJob + 1,
+  );
 }
 
 describe('Electron build configuration', () => {
+  it('normalizes an optional leading UTF-8 BOM and CRLF line endings without changing an interior BOM', () => {
+    expect(normalizeConfigurationText('\uFEFF  linux:\r\n    runs-on: ubuntu-latest')).toBe(
+      '  linux:\n    runs-on: ubuntu-latest',
+    );
+    expect(normalizeConfigurationText('  linux:\r\n    \uFEFFruns-on: ubuntu-latest')).toBe(
+      '  linux:\n    \uFEFFruns-on: ubuntu-latest',
+    );
+  });
+
+  it('extracts Electron importer and Linux job data from CRLF configuration text with a leading BOM', () => {
+    const crlfLockfile = [
+      "\uFEFFlockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    devDependencies:',
+      '      electron:',
+      '        specifier: 33.2.1',
+      '        version: 33.2.1',
+      '',
+      'packages:',
+    ].join('\r\n');
+    const crlfWorkflow = [
+      '\uFEFFname: ci',
+      '',
+      'jobs:',
+      '  linux:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: pnpm test',
+      '  windows:',
+      '    runs-on: windows-latest',
+    ].join('\r\n');
+
+    for (const [lockfileText, workflowText] of [
+      [crlfLockfile, crlfWorkflow],
+      [crlfLockfile.slice(1), crlfWorkflow.slice(1)],
+    ]) {
+      expect(importerSpecifier(lockfileText, 'devDependencies', 'electron')).toBe('33.2.1');
+      expect(workflowJob(workflowText, 'linux')).toBe(`  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm test`);
+    }
+  });
+
   it('emits the configured main entry directly under dist-electron', () => {
     expect(packageConfiguration.main).toBe('dist-electron/electron/main.js');
     expect(typeScriptConfiguration.compilerOptions.rootDir).toBe('src');
@@ -93,8 +153,8 @@ describe('Electron build configuration', () => {
     ]) {
       expect(packageConfiguration.dependencies[dependency]).toBeUndefined();
       expect(packageConfiguration.devDependencies[dependency]).toBe(version);
-      expect(importerSpecifier('dependencies', dependency)).toBeUndefined();
-      expect(importerSpecifier('devDependencies', dependency)).toBe(version);
+      expect(importerSpecifier(lockfile, 'dependencies', dependency)).toBeUndefined();
+      expect(importerSpecifier(lockfile, 'devDependencies', dependency)).toBe(version);
     }
   });
 
