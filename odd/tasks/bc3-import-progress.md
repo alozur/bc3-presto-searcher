@@ -182,10 +182,45 @@ committed came from inspecting the database with a read-only connection that was
 reading the main file without the WAL, so it saw a stale row. A `wal_checkpoint`
 run later made the committed value visible. There was never a hang.
 
+## Work unit 6: clipped milestone markers (presentational)
+
+User report: the milestone history bullets were cut off, and the percentage line
+looked like it started with a tab.
+
+`.import-milestones` set its padding with a shorthand, which overrode the
+default `padding-inline-start` the list markers are painted into. With only
+`.75rem` of inline space and `overflow-x: hidden`, the disc markers fell outside
+the padding box and were clipped. The "tab" report was the same defect: a
+half-clipped disc is a vertical sliver, not a bullet.
+
+Fix: an explicit four-value padding, `padding: .5rem .75rem .5rem 1.75rem`, so
+the inline-start room is no longer clobbered. A regression assertion in the
+renderer test reads `style.css` and rejects a collapse back to the two-value
+shorthand.
+
+## Work unit 7: completion sound with a persisted setting
+
+User's choices: enabled by default, sounds on success including the unchanged
+outcome, sounds on failure, and stays silent on cancellation.
+
+The chime is synthesized with Web Audio (sine A5 then D6, about 0.14 s each, at
+low gain) so no audio asset enters the repository. The preference persists in
+`localStorage` under the namespaced key `presto.import.completion-sound`, with
+an in-memory fallback for when storage throws. Electron does serve
+`localStorage` from a `file://` page; this was verified with a real Electron
+probe rather than assumed.
+
+One deviation the implementer had to make: the global `input { min-width: 18rem }`
+rule would have stretched the checkbox to 18rem, so a more specific rule
+(`.import-completion-sound input`) neutralises it.
+
 ## Review workload
 
 Work unit 5: 8 modified files plus one new test file, about 190 changed lines.
-Branch total vs `main` is 18 files, roughly +770/-45.
+Work unit 6: 1 file, +4/-1.
+Work unit 7: 5 files (including one new module and its test), about 175 changed
+lines.
+Branch total vs `main` is 17 files, roughly +1037/-48.
 
 ## Allowed edit surfaces
 

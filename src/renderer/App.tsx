@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ItemDetail, ItemRef, SearchResponse } from '../domain/catalog';
 import type { ImportProgress, ImportResponse, PrestoApi } from '../shared/ipc';
 import { presentBreakdownQuantity } from './productivity';
+import { isCompletionSoundEnabled, playCompletionSound, setCompletionSoundEnabled } from './completionSound';
 
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
 
@@ -119,6 +120,7 @@ export function App() {
   const detailRequestVersion = useRef(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [completionSoundEnabled, setCompletionSoundEnabledState] = useState(() => isCompletionSoundEnabled());
   const api = (window as RendererWindow).presto;
 
   useEffect(() => api?.onImportProgress((progress) => {
@@ -168,6 +170,11 @@ export function App() {
     setDetail(null);
   }
 
+  function toggleCompletionSound(enabled: boolean) {
+    setCompletionSoundEnabledState(enabled);
+    setCompletionSoundEnabled(enabled);
+  }
+
   async function importCatalog() {
     if (!api) return setMessage('La aplicación de escritorio no está disponible.');
     setMessage(null);
@@ -175,8 +182,11 @@ export function App() {
     setImportResult(null);
     setImportActivity({ status: 'pending', progress: null, recordsProgress: null, startedAt: Date.now(), milestones: [], milestoneStage: null, milestoneBoundary: 0 });
     try {
-      setImportResult(await api.importApprovedSource());
+      const response = await api.importApprovedSource();
+      setImportResult(response);
+      if (imported(response) && completionSoundEnabled) playCompletionSound();
     } catch {
+      if (completionSoundEnabled) playCompletionSound();
       setMessage('No se pudo importar el catálogo seleccionado.');
     } finally {
       setImportActivity({ status: 'idle' });
@@ -232,6 +242,10 @@ export function App() {
     <section aria-labelledby="import-title">
       <h2 id="import-title">Importar catálogo</h2>
       <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
+      <label className="import-completion-sound">
+        <input type="checkbox" checked={completionSoundEnabled} onChange={(event) => toggleCompletionSound(event.target.checked)} />
+        Emitir un sonido al terminar
+      </label>
       {importActivity.status === 'pending' && importActivity.progress !== null && <>
           <p role="status">Importación en curso. {progressMessage(importActivity.progress)}</p>
           {(() => {

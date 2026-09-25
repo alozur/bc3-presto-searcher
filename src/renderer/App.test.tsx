@@ -2,10 +2,17 @@
 import { readFileSync } from 'node:fs';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemDetail, SearchCandidate, SearchResponse } from '../domain/catalog';
 import type { ImportProgress, PrestoApi } from '../shared/ipc';
 import { App } from './App';
+import { isCompletionSoundEnabled, playCompletionSound, setCompletionSoundEnabled } from './completionSound';
+
+vi.mock('./completionSound', () => ({
+  isCompletionSoundEnabled: vi.fn(() => true),
+  setCompletionSoundEnabled: vi.fn(),
+  playCompletionSound: vi.fn(),
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -36,6 +43,11 @@ afterEach(async () => {
 });
 
 describe('Presto catalog screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(isCompletionSoundEnabled).mockReturnValue(true);
+  });
+
   it('guides blank searches, reports imports, shows mixed results, and opens E11XM020 detail', async () => {
     const search: SearchResponse = {
       status: 'ok',
@@ -59,7 +71,7 @@ describe('Presto catalog screen', () => {
     expect(container.textContent).toContain('1 partidas y 3 recursos importados');
     expect(container.textContent).toContain('Registro omitido.');
 
-    const input = container.querySelector('input')!;
+    const input = container.querySelector<HTMLInputElement>('#search-query')!;
     await act(async () => enterText(input, 'barniz'));
     await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
     expect(container.textContent).toContain('Partida');
@@ -109,6 +121,19 @@ describe('Presto catalog screen', () => {
     expect(panelRule).toMatch(/overflow-wrap:\s*anywhere;/);
   });
 
+  it('keeps the import milestones padding expanded so list markers stay visible', () => {
+    const rendererCss = readFileSync('src/renderer/style.css', 'utf8');
+    const milestonesRule = rendererCss.match(/\.import-milestones\s*\{([^}]*)\}/)?.[1];
+    expect(milestonesRule).toBeDefined();
+    const padding = milestonesRule!.match(/(?:^|;)\s*padding:\s*([^;]+);/m)?.[1];
+    expect(padding).toBeDefined();
+    const values = padding!.trim().split(/\s+/);
+    // A two-value shorthand would clobber the space reserved for the markers,
+    // which overflow-x: hidden then clips.
+    expect(values).toHaveLength(4);
+    expect(parseFloat(values[3]!)).toBeGreaterThanOrEqual(1.5);
+  });
+
   it('reports unchanged imports without counts, skipped records, or diagnostics', async () => {
     const api: PrestoApi = {
       importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 12, importedResources: 34, skippedRecords: 0, diagnostics: [{ code: 'ignored-record', sourceDisplayName: 'catalog.bc3', line: 3, messageEs: 'Registro omitido que no debe mostrarse.' }], completedAt: '2025-01-01T00:00:00.000Z', unchanged: true })),
@@ -132,6 +157,82 @@ describe('Presto catalog screen', () => {
     expect(container.querySelector('section.import-diagnostics-panel')).toBeNull();
   });
 
+  it('renders the completion-sound checkbox checked by default and persists unchecking it', async () => {
+    await render(apiFor({ status: 'empty-query' }, vi.fn(async () => null)));
+    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox.checked).toBe(true);
+    expect(isCompletionSoundEnabled).toHaveBeenCalled();
+    await act(async () => click(checkbox));
+    expect(checkbox.checked).toBe(false);
+    expect(setCompletionSoundEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it('plays the completion sound on a successful import', async () => {
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 1, importedResources: 2, skippedRecords: 0, diagnostics: [], completedAt: '2025-01-01T00:00:00.000Z' })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(playCompletionSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays the completion sound when the import reports no changes', async () => {
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 1, importedResources: 2, skippedRecords: 0, diagnostics: [], completedAt: '2025-01-01T00:00:00.000Z', unchanged: true })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(playCompletionSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays the completion sound when the import fails', async () => {
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => { throw new Error('failed import'); }),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(playCompletionSound).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo importar el catálogo seleccionado.');
+  });
+
+  it('does not play the completion sound when the import is cancelled', async () => {
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ status: 'cancelled' as const })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(container.textContent).toContain('La importación fue cancelada.');
+    expect(playCompletionSound).not.toHaveBeenCalled();
+  });
+
+  it('does not play the completion sound when the setting is disabled', async () => {
+    vi.mocked(isCompletionSoundEnabled).mockReturnValue(false);
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 1, importedResources: 2, skippedRecords: 0, diagnostics: [], completedAt: '2025-01-01T00:00:00.000Z' })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(playCompletionSound).not.toHaveBeenCalled();
+  });
+
   it('shows complete import activity while search remains available and clears it after success', async () => {
     let reportProgress: ((progress: ImportProgress) => void) | undefined;
     let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
@@ -152,7 +253,7 @@ describe('Presto catalog screen', () => {
     expect(container.textContent).not.toContain('Tiempo transcurrido:');
     expect(container.querySelector('[aria-label="Etapas de importación"]')).toBeNull();
     expect(importButton.disabled).toBe(true);
-    const input = container.querySelector('input')!;
+    const input = container.querySelector<HTMLInputElement>('#search-query')!;
     const searchButton = container.querySelector('button[aria-label="Buscar"]') as HTMLButtonElement;
     expect(input.disabled).toBe(false);
     expect(searchButton.disabled).toBe(false);
@@ -300,7 +401,7 @@ describe('Presto catalog screen', () => {
 
   async function showResults(api: PrestoApi) {
     await render(api);
-    const input = container.querySelector('input')!;
+    const input = container.querySelector<HTMLInputElement>('#search-query')!;
     await act(async () => enterText(input, 'x'));
     await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
   }
