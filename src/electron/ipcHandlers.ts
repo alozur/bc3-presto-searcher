@@ -11,8 +11,8 @@ export function createIpcHandlers(dependencies: CatalogIpcDependencies) {
   return {
     importApprovedSource: async () => dependencies.importSource.execute(),
     search: async (request: unknown) => {
-      const { query, limit } = validateSearchRequest(request);
-      return dependencies.searchCatalog.execute(query, limit);
+      const { query, limit, offset } = validateSearchRequest(request);
+      return dependencies.searchCatalog.execute(query, { limit, offset });
     },
     detail: async (request: unknown) => dependencies.getItemDetail.execute(validateDetailRequest(request)),
   };

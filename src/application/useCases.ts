@@ -34,14 +34,34 @@ export class ImportApprovedSource {
   }
 }
 
+export type SearchPage = { limit?: number; offset?: number };
+
+function boundedLimit(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(100, Math.trunc(value))) : 100;
+}
+
+// A request that would land past the end is served the last whole window instead
+// of an empty one, and `offset` reports what was served. Without this, a shrinking
+// match set (a re-import, or a query edited while paged) renders "N resultados."
+// above an empty list with no pager. An in-range request is honored exactly, even
+// when it is not aligned to the window size.
+function boundedOffset(value: number | undefined, total: number, limit: number) {
+  const requested = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  if (total === 0) return 0;
+  if (requested <= total - 1) return requested;
+  return Math.floor((total - 1) / limit) * limit;
+}
+
 export class SearchCatalog {
   constructor(private repo: CatalogRepository) {}
-  async execute(query: string, limit = 100) {
+  async execute(query: string, page: SearchPage = {}) {
     const tokens = normalizeTokens(query);
     if (!tokens.length) return { status: 'empty-query' as const };
     const candidates = await this.repo.findSearchCandidates(tokens);
-    const bounded = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 100;
-    return { status: 'ok' as const, items: rankCandidates(candidates, tokens).slice(0, bounded) };
+    const ranked = rankCandidates(candidates, tokens);
+    const limit = boundedLimit(page.limit);
+    const offset = boundedOffset(page.offset, ranked.length, limit);
+    return { status: 'ok' as const, items: ranked.slice(offset, offset + limit), total: ranked.length, offset, limit };
   }
 }
 
