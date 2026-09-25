@@ -3,9 +3,15 @@ import { validateDetailRequest, validateSearchRequest, type ImportResponse, type
 
 describe('IPC request validation', () => {
   it('accepts only bounded plain search requests', () => {
-    expect(validateSearchRequest({ query: 'agua', limit: 4 })).toEqual({ query: 'agua', limit: 4 });
+    expect(validateSearchRequest({ query: 'agua', limit: 4 })).toEqual({ query: 'agua', limit: 4, offset: 0 });
     expect(() => validateSearchRequest({ query: 'x', extra: true })).toThrow();
     expect(() => validateSearchRequest({ query: 'x'.repeat(10001) })).toThrow();
+  });
+  it('preserves explicit offsets, rejects non-finite offsets, and clamps negative offsets', () => {
+    expect(validateSearchRequest({ query: 'agua', limit: 10, offset: 20 })).toEqual({ query: 'agua', limit: 10, offset: 20 });
+    expect(() => validateSearchRequest({ query: 'x', offset: Number.NaN })).toThrow('invalid-request');
+    expect(() => validateSearchRequest({ query: 'x', offset: Number.POSITIVE_INFINITY })).toThrow('invalid-request');
+    expect(validateSearchRequest({ query: 'agua', offset: -5 })).toEqual({ query: 'agua', limit: 100, offset: 0 });
   });
   it('defines named, measured import stages without a global percentage', () => {
     const progress: ImportProgress[] = [

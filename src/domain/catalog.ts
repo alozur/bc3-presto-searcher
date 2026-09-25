@@ -10,5 +10,5 @@ export type UnresolvedChildDiagnostic = ImportDiagnostic & {code:'unresolved-chi
 export type SourceEntity = { line:number; code:string; name:string; fields:readonly string[] };
 export type ImportSnapshot = {source:SourceKey;sourceDisplayName:string;contentHash?:string;items:readonly CatalogItem[];breakdowns:readonly {parent:ItemRef;line:BreakdownLine}[];entities:readonly SourceEntity[];diagnostics:readonly ImportDiagnostic[]};
 export type SearchCandidate = CatalogItem & {fieldCounts:{description:number;keywords:number;code:number;expandedText:number};exactCode:boolean};
-export type SearchResponse = {status:'ok';items:readonly SearchCandidate[]}|{status:'empty-query'};
+export type SearchResponse = {status:'ok';items:readonly SearchCandidate[];total:number;offset:number;limit:number}|{status:'empty-query'};
 export function codeKey(code:string){return code.trim().toLocaleLowerCase('es');}

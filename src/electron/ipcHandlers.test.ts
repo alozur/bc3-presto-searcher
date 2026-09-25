@@ -14,7 +14,7 @@ describe('catalog IPC handlers', () => {
     await expect(handlers.search({ query: 'x', unsafe: true })).rejects.toThrow('invalid-request');
 
     expect(importSource.execute).toHaveBeenCalledOnce();
-    expect(searchCatalog.execute).toHaveBeenCalledWith(' barniz ', 4);
+    expect(searchCatalog.execute).toHaveBeenCalledWith(' barniz ', { limit: 4, offset: 0 });
     expect(getItemDetail.execute).toHaveBeenCalledWith({ source: 'guadalajara-2016-eu', codeKey: 'e11xm020' });
   });
 });

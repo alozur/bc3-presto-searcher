@@ -34,14 +34,26 @@ export class ImportApprovedSource {
   }
 }
 
+export type SearchPage = { limit?: number; offset?: number };
+
+function boundedLimit(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(100, Math.trunc(value))) : 100;
+}
+
+function boundedOffset(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+}
+
 export class SearchCatalog {
   constructor(private repo: CatalogRepository) {}
-  async execute(query: string, limit = 100) {
+  async execute(query: string, page: SearchPage = {}) {
     const tokens = normalizeTokens(query);
     if (!tokens.length) return { status: 'empty-query' as const };
     const candidates = await this.repo.findSearchCandidates(tokens);
-    const bounded = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 100;
-    return { status: 'ok' as const, items: rankCandidates(candidates, tokens).slice(0, bounded) };
+    const ranked = rankCandidates(candidates, tokens);
+    const limit = boundedLimit(page.limit);
+    const offset = boundedOffset(page.offset);
+    return { status: 'ok' as const, items: ranked.slice(offset, offset + limit), total: ranked.length, offset, limit };
   }
 }
 
