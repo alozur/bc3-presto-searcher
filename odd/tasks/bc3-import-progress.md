@@ -220,7 +220,10 @@ Work unit 5: 8 modified files plus one new test file, about 190 changed lines.
 Work unit 6: 1 file, +4/-1.
 Work unit 7: 5 files (including one new module and its test), about 175 changed
 lines.
-Branch total vs `main` is 17 files, roughly +1037/-48.
+Branch total vs `main` is 19 files, +1228/-48, measured after every work unit
+was committed. An earlier revision of this line said 17 files and +1037, because
+`git diff --stat` does not count untracked files and the two new renderer modules
+were still untracked at the time.
 
 ## Allowed edit surfaces
 
