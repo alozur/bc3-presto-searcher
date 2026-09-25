@@ -195,6 +195,68 @@ describe('Presto catalog screen', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('No se pudo importar el catálogo seleccionado.');
   });
 
+  function pendingImportApi() {
+    const controllers: {
+      report?: (progress: ImportProgress) => void;
+      complete?: (response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void;
+    } = {};
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((resolve) => { controllers.complete = resolve; })),
+      onImportProgress: vi.fn((listener) => { controllers.report = listener; return () => undefined; }),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    return { api, controllers };
+  }
+
+  it('shows a determinate stage-scoped progress bar with a Spanish counter while a stage is measured', async () => {
+    const { api, controllers } = pendingImportApi();
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    await act(async () => controllers.report?.({ stage: 'processing-records', completed: 50, total: 100 }));
+    const bar = container.querySelector('progress[aria-label="Progreso de procesamiento de registros"]') as HTMLProgressElement;
+    expect(bar).toBeTruthy();
+    expect(bar.max).toBe(100);
+    expect(bar.value).toBe(50);
+    expect(container.textContent).toContain('50 de 100 registros procesados');
+    await act(async () => controllers.report?.({ stage: 'storing', completed: 1400753, total: 2801506 }));
+    const storingBar = container.querySelector('progress[aria-label="Progreso de operaciones de guardado"]') as HTMLProgressElement;
+    expect(storingBar.value).toBe(50);
+    expect(container.textContent).toContain('1.400.753 de 2.801.506 operaciones de guardado');
+  });
+
+  it('renders an indeterminate progress bar while validating relations', async () => {
+    const { api, controllers } = pendingImportApi();
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    await act(async () => controllers.report?.({ stage: 'validating-relations' }));
+    const bar = container.querySelector('progress[aria-label="Progreso de validación de relaciones"]');
+    expect(bar).toBeTruthy();
+    expect(bar!.hasAttribute('value')).toBe(false);
+  });
+
+  it('appends each 10 % milestone exactly once per stage and ignores repeated percents', async () => {
+    const { api, controllers } = pendingImportApi();
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    const milestones = () => [...container.querySelectorAll('ul[aria-label="Hitos de importación"] li')].map((li) => li.textContent);
+    await act(async () => controllers.report?.({ stage: 'processing-records', completed: 10, total: 100 }));
+    expect(milestones()).toEqual(['Registros procesados: 10 % (10 de 100)']);
+    await act(async () => controllers.report?.({ stage: 'processing-records', completed: 10, total: 100 }));
+    expect(milestones()).toEqual(['Registros procesados: 10 % (10 de 100)']);
+    await act(async () => controllers.report?.({ stage: 'storing', completed: 2801506, total: 2801506 }));
+    expect(milestones()).toEqual(['Registros procesados: 10 % (10 de 100)', 'Operaciones de guardado: 100 % (2.801.506 de 2.801.506)']);
+  });
+
+  it('shows the measured elapsed line while pending and removes it once the import settles', async () => {
+    const { api, controllers } = pendingImportApi();
+    await render(api);
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    expect(container.textContent).toMatch(/Tiempo transcurrido: \d+ s/);
+    await act(async () => controllers.complete?.({ status: 'cancelled' }));
+    expect(container.textContent).not.toContain('Tiempo transcurrido:');
+  });
+
   function item(source: 'guadalajara-2016-rm' | 'guadalajara-2016-eu', codeKey: string, code: string, kind: 'partida' | 'resource' = 'partida') {
     return { ref: { source, codeKey }, kind, code, description: `${code} description`, unit: kind === 'partida' ? 'm²' : 'l', price: '12.50', keywords: [], expandedText: code, sourceDisplayName: source, fieldCounts: { code: 1, description: 1, keywords: 0, expandedText: 1 }, exactCode: false } as SearchCandidate;
   }

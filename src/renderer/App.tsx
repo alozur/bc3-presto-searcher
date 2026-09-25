@@ -6,9 +6,18 @@ import { presentBreakdownQuantity } from './productivity';
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
 
 type ProcessingProgress = Extract<ImportProgress, { stage: 'processing-records' }>;
+type MeasuredProgress = Extract<ImportProgress, { completed: number; total: number }>;
 type ImportActivity =
   | { status: 'idle' }
-  | { status: 'pending'; progress: ImportProgress | null; recordsProgress: ProcessingProgress | null };
+  | {
+      status: 'pending';
+      progress: ImportProgress | null;
+      recordsProgress: ProcessingProgress | null;
+      startedAt: number;
+      milestones: string[];
+      milestoneStage: ImportProgress['stage'] | null;
+      milestoneBoundary: number;
+    };
 
 const importStages: ImportProgress['stage'][] = ['processing-records', 'validating-relations', 'storing'];
 
@@ -41,6 +50,32 @@ function stageMessage(stage: ImportProgress['stage'], recordsProgress: Processin
   if (stage === 'processing-records') return progressMessage(recordsProgress);
   if (stage === 'validating-relations') return 'Validando relaciones del catálogo…';
   return 'Operaciones de guardado.';
+}
+
+function stageAriaLabel(stage: ImportProgress['stage']) {
+  if (stage === 'processing-records') return 'Progreso de procesamiento de registros';
+  if (stage === 'validating-relations') return 'Progreso de validación de relaciones';
+  return 'Progreso de operaciones de guardado';
+}
+
+function counterLabel(stage: MeasuredProgress['stage']) {
+  return stage === 'processing-records' ? 'registros procesados' : 'operaciones de guardado';
+}
+
+function formatElapsed(seconds: number) {
+  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+}
+
+function milestoneFor(progress: ImportProgress) {
+  if (progress.stage === 'validating-relations') return null;
+  const percent = measuredPercent(progress);
+  if (percent === null) return null;
+  const boundary = Math.floor(percent / 10) * 10;
+  if (boundary < 10) return null;
+  const completed = progress.completed.toLocaleString('es-ES');
+  const total = progress.total.toLocaleString('es-ES');
+  const label = progress.stage === 'processing-records' ? 'Registros procesados' : 'Operaciones de guardado';
+  return { stage: progress.stage, boundary, line: `${label}: ${boundary} % (${completed} de ${total})` };
 }
 
 function itemIdentity(ref: ItemRef) {
@@ -82,6 +117,7 @@ export function App() {
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const detailRequestVersion = useRef(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const api = (window as RendererWindow).presto;
 
@@ -91,13 +127,40 @@ export function App() {
       const previous = current.progress;
       if (previous && stageIndex(progress.stage) < stageIndex(previous.stage)) return current;
       if (progress.stage === 'processing-records' && current.recordsProgress && progress.completed < current.recordsProgress.completed) return current;
+      let { milestones, milestoneStage, milestoneBoundary } = current;
+      const milestone = milestoneFor(progress);
+      if (milestone) {
+        if (milestone.stage !== milestoneStage) {
+          milestoneStage = milestone.stage;
+          milestoneBoundary = 0;
+        }
+        if (milestone.boundary > milestoneBoundary) {
+          milestoneBoundary = milestone.boundary;
+          milestones = [...milestones, milestone.line].slice(-20);
+        }
+      }
       return {
         status: 'pending',
         progress,
         recordsProgress: progress.stage === 'processing-records' ? progress : current.recordsProgress,
+        startedAt: current.startedAt,
+        milestones,
+        milestoneStage,
+        milestoneBoundary,
       };
     });
   }), [api]);
+
+  useEffect(() => {
+    if (!importing) return;
+    // startedAt is captured once when the import starts; re-runs key on the importing transition only.
+    const startedAt = importActivity.status === 'pending' ? importActivity.startedAt : Date.now();
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [importing]);
 
   function clearDetailSelection() {
     detailRequestVersion.current += 1;
@@ -110,7 +173,7 @@ export function App() {
     setMessage(null);
     clearDetailSelection();
     setImportResult(null);
-    setImportActivity({ status: 'pending', progress: null, recordsProgress: null });
+    setImportActivity({ status: 'pending', progress: null, recordsProgress: null, startedAt: Date.now(), milestones: [], milestoneStage: null, milestoneBoundary: 0 });
     try {
       setImportResult(await api.importApprovedSource());
     } catch {
@@ -169,8 +232,23 @@ export function App() {
     <section aria-labelledby="import-title">
       <h2 id="import-title">Importar catálogo</h2>
       <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
-      {importing && <>
+      {importActivity.status === 'pending' && <>
           <p role="status">Importación en curso. {progressMessage(importActivity.progress)}</p>
+          {(() => {
+            const { progress, milestones } = importActivity;
+            const measured = progress && progress.stage !== 'validating-relations' ? progress : null;
+            const percent = measured ? measuredPercent(measured) : null;
+            return <>
+              {progress && <progress aria-label={stageAriaLabel(progress.stage)} max={100} value={percent ?? undefined} />}
+              {measured && <p className="import-counter">{measured.completed.toLocaleString('es-ES')} de {measured.total.toLocaleString('es-ES')} {counterLabel(measured.stage)}</p>}
+              <p className="import-elapsed">Tiempo transcurrido: {formatElapsed(elapsedSeconds)}</p>
+              {/* Not a live region: the role="status" line above is the single fast-changing live region,
+                  so screen readers announce progress once instead of double-announcing every update. */}
+              {milestones.length > 0 && <ul className="import-milestones" aria-label="Hitos de importación">
+                {milestones.map((milestone, index) => <li key={index}>{milestone}</li>)}
+              </ul>}
+            </>;
+          })()}
           <ol aria-label="Etapas de importación">
             {importStages.map((stage) => {
               const currentStage = importActivity.progress?.stage;

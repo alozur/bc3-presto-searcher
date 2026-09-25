@@ -3,6 +3,7 @@ import type { SelectedSource } from '../application/ports';
 import { parseBc3 } from '../domain/bc3/parser';
 import { SqliteCatalogRepository } from '../infrastructure/sqlite/repository';
 import { countSkippedRecords } from '../domain/importDiagnostics';
+import { createProgressThrottle } from './progressThrottle';
 
 const port = parentPort;
 if (!port) throw new Error('BC3 import worker requires a parent port');
@@ -11,13 +12,15 @@ type ImportRequest = { databasePath: string; selected: SelectedSource };
 
 port.on('message', async ({ databasePath, selected }: ImportRequest) => {
   try {
-    const snapshot = parseBc3(selected.bytes, selected.source, selected.displayName, (progress) => {
+    const throttle = createProgressThrottle((progress) => {
       port.postMessage({ type: 'progress', progress });
     });
 
+    const snapshot = parseBc3(selected.bytes, selected.source, selected.displayName, throttle);
+
     const repository = SqliteCatalogRepository.open(databasePath);
     await repository.replaceSource(snapshot, (progress) => {
-      port.postMessage({ type: 'progress', progress: { stage: 'storing', ...progress } });
+      throttle({ stage: 'storing', ...progress });
     });
 
     port.postMessage({
