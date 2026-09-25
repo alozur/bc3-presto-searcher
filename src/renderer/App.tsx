@@ -22,6 +22,8 @@ type ImportActivity =
 
 const importStages: ImportProgress['stage'][] = ['processing-records', 'validating-relations', 'storing'];
 
+const SEARCH_PAGE_SIZE = 10;
+
 function stageIndex(stage: ImportProgress['stage']) {
   return importStages.indexOf(stage);
 }
@@ -118,6 +120,7 @@ export function App() {
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [detail, setDetail] = useState<ItemDetail | null>(null);
   const detailRequestVersion = useRef(0);
+  const searchRequestVersion = useRef(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [completionSoundEnabled, setCompletionSoundEnabledState] = useState(() => isCompletionSoundEnabled());
@@ -193,18 +196,23 @@ export function App() {
     }
   }
 
-  async function search() {
+  async function search(offset = 0) {
     const trimmed = query.trim();
     clearDetailSelection();
     if (!trimmed) {
+      searchRequestVersion.current += 1;
       setSearchResult({ status: 'empty-query' });
       return;
     }
     if (!api) return setMessage('La aplicación de escritorio no está disponible.');
     setMessage(null);
+    const version = ++searchRequestVersion.current;
     try {
-      setSearchResult(await api.search({ query: trimmed }));
+      const response = await api.search({ query: trimmed, limit: SEARCH_PAGE_SIZE, offset });
+      if (version !== searchRequestVersion.current) return;
+      setSearchResult(response);
     } catch {
+      if (version !== searchRequestVersion.current) return;
       setMessage('No se pudo realizar la búsqueda.');
     }
   }
@@ -232,6 +240,11 @@ export function App() {
       setMessage('No se pudo abrir el detalle del elemento.');
     }
   }
+
+  // The page is derived from the served window (offset/limit) so it cannot drift from the list.
+  const okResult = searchResult?.status === 'ok' ? searchResult : null;
+  const totalPages = okResult && okResult.limit > 0 ? Math.max(1, Math.ceil(okResult.total / okResult.limit)) : 1;
+  const currentPage = okResult && okResult.limit > 0 ? Math.floor(okResult.offset / okResult.limit) + 1 : 1;
 
   return <main>
     <header className="app-masthead">
@@ -299,10 +312,10 @@ export function App() {
         <button aria-label="Buscar" onClick={() => void search()}>Buscar</button>
       </div>
       {searchResult?.status === 'empty-query' && <p role="status">Introduzca uno o más términos de búsqueda.</p>}
-      {searchResult?.status === 'ok' && <>
-        <p>{searchResult.items.length} resultados.</p>
+      {okResult && <>
+        <p>{okResult.total} resultados.</p>
         <ul className="results" aria-label="Resultados de búsqueda">
-          {searchResult.items.map((item) => {
+          {okResult.items.map((item) => {
             const identity = itemIdentity(item.ref);
             const ids = resultIds(item.ref);
             const visibleDetail = selectedIdentity === identity && detail && itemIdentity(detail.item.ref) === identity ? detail : null;
@@ -316,6 +329,11 @@ export function App() {
             </li>;
           })}
         </ul>
+        {totalPages > 1 && <nav className="results-pagination" aria-label="Paginación de resultados">
+          <button type="button" aria-label="Página anterior" disabled={currentPage <= 1} onClick={() => void search(Math.max(0, okResult.offset - okResult.limit))}>Anterior</button>
+          <p className="results-page-status" aria-live="polite">Página {currentPage} de {totalPages}</p>
+          <button type="button" aria-label="Página siguiente" disabled={currentPage >= totalPages} onClick={() => void search(okResult.offset + okResult.limit)}>Siguiente</button>
+        </nav>}
       </>}
     </section>
 

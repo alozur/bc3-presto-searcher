@@ -294,6 +294,26 @@ The visual probe found three defects that no test could catch. All three are fix
   rail" ambiguously; the shipped form pins a `::before` rail to each panel's top edge.
   Reviewed visually and kept. Making it a single viewport-top rail is a ~3-line change.
 
+### 5. Integrate the paginated results work that landed on main first
+- Status: done
+- Evidence: `origin/main` moved to `85ae1d9` (merge of `feat/search-pagination`) while this
+  branch waited, so the branch rebased onto it. `git merge-tree` predicted exactly one
+  conflicting file — `src/renderer/style.css` — while `src/renderer/App.tsx` auto-merged and
+  kept every markup touch from task 2 next to the new pager markup. The conflict was resolved
+  by keeping this branch's rewrite and re-adopting the pager block into the token system:
+  `var(--ink-muted)` and the type scale instead of a hardcoded `#475569`, a closing rule that
+  bleeds one gutter step so it lines up with the row separators, and the redundant
+  `button:disabled` block dropped because the base rule already covers it. The probe stub was
+  aligned to the new `SearchResponse` (`total`/`offset`/`limit`) and its catalog grew to 12
+  rows so the pager actually renders, plus a new `paginacion` scene that also drives page two.
+  Re-verified on the merged base: `pnpm test` 128/128, `tsc` exit 0, `pnpm build` exit 0,
+  `pnpm probe` exit 0 with 7 scenes and no failed expectation.
+- Notes: done in an isolated `git worktree`, so the shared working directory — which another
+  session had already switched to its own branch — was never disturbed. The previous
+  verification result was measurably stale in two ways: the suite had grown from 116 to 128
+  (the renderer file from 22 to 29 tests), and the old probe stub returned no pagination
+  fields, so it would have hidden the pager completely while still reporting a clean run.
+
 ## Not in this change
 
 - The visual probe harness shipped as its own follow-up work unit under

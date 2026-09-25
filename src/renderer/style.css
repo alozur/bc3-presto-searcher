@@ -297,6 +297,32 @@ section.panel > p:not([role]) {
   font-size: .9375rem;
 }
 
+/* Result pager. Centred under the list and bleeding one gutter step like the rows, so its
+   closing rule lines up with the row separators instead of stopping short of them. */
+.results-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem 1rem;
+  margin: 0 -1rem;
+  padding: 1.25rem 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+/* A margin on these buttons would break the centring. The base button rule already zeroes
+   it; this keeps the guarantee local to the row. */
+.results-pagination button {
+  margin: 0;
+}
+
+.results-page-status {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .result-detail {
   margin-top: 1rem;
   padding: 1.125rem 1.25rem;

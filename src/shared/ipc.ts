@@ -2,7 +2,7 @@ import type { ImportDiagnostic, ItemDetail, ItemRef, SearchResponse, SourceKey }
 
 export const IPC_CHANNELS = { import: 'presto:import', importProgress: 'presto:import-progress', search: 'presto:search', detail: 'presto:detail' } as const;
 
-export type SearchRequest = { query: string; limit?: number };
+export type SearchRequest = { query: string; limit?: number; offset?: number };
 export type DetailRequest = ItemRef;
 export type ImportProgress =
   | { stage: 'processing-records'; completed: number; total: number }
@@ -31,15 +31,19 @@ const sources = new Set<SourceKey>(['guadalajara-2016-rm', 'guadalajara-2016-eu'
 export function clampLimit(n = 100) {
   return Number.isFinite(n) ? Math.max(1, Math.min(100, Math.trunc(n))) : 100;
 }
+export function clampOffset(n = 0) {
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+}
 function plainObject(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid-request');
   return value as Record<string, unknown>;
 }
-export function validateSearchRequest(value: unknown): { query: string; limit: number } {
+export function validateSearchRequest(value: unknown): { query: string; limit: number; offset: number } {
   const request = plainObject(value);
-  if (Object.keys(request).some((key) => !['query', 'limit'].includes(key)) || typeof request.query !== 'string' || request.query.length > 10000) throw new Error('invalid-request');
+  if (Object.keys(request).some((key) => !['query', 'limit', 'offset'].includes(key)) || typeof request.query !== 'string' || request.query.length > 10000) throw new Error('invalid-request');
   if (request.limit !== undefined && (typeof request.limit !== 'number' || !Number.isFinite(request.limit))) throw new Error('invalid-request');
-  return { query: request.query, limit: clampLimit(request.limit as number | undefined) };
+  if (request.offset !== undefined && (typeof request.offset !== 'number' || !Number.isFinite(request.offset))) throw new Error('invalid-request');
+  return { query: request.query, limit: clampLimit(request.limit as number | undefined), offset: clampOffset(request.offset as number | undefined) };
 }
 export function validateDetailRequest(value: unknown): ItemRef {
   const request = plainObject(value);

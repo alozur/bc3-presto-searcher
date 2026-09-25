@@ -87,6 +87,96 @@ const CATALOG = [
     expandedText: '',
     sourceDisplayName: SOURCE_EU_NAME,
   },
+  // Enough rows to exceed SEARCH_PAGE_SIZE (10), so the pager actually renders and is
+  // covered instead of silently collapsing to one page.
+  {
+    ref: { source: SOURCE_EU, codeKey: 'a01ma040' },
+    kind: 'resource',
+    code: 'A01MA040',
+    description: 'Mortero industrial para albañilería, según UNE-EN 998-2, de 7,5 N/mm² de resistencia a compresión, a granel.',
+    unit: 'm3',
+    price: '74,35',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_EU_NAME,
+  },
+  {
+    ref: { source: SOURCE_EU, codeKey: 'p01lh020' },
+    kind: 'resource',
+    code: 'P01LH020',
+    description: 'Ladrillo perforado de 25x12x11,5 cm, según UNE-EN 771-1, para revestir con mortero.',
+    unit: 'ud',
+    price: '0,21',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_EU_NAME,
+  },
+  {
+    ref: { source: SOURCE_EU, codeKey: 'e07da010' },
+    kind: 'partida',
+    code: 'E07DA010',
+    description: 'Tabique de placas de yeso laminado, de 68 mm de espesor total, con estructura metálica de acero galvanizado, incluso replanteo y limpieza.',
+    unit: 'm2',
+    price: '28,44',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_EU_NAME,
+  },
+  {
+    ref: { source: SOURCE_RM, codeKey: 'e08pee010' },
+    kind: 'partida',
+    code: 'E08PEE010',
+    description: 'Pintura plástica lisa mate sobre paramento interior de yeso o mortero, color a elegir, incluso preparación del soporte.',
+    unit: 'm2',
+    price: '6,18',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_RM_NAME,
+  },
+  {
+    ref: { source: SOURCE_EU, codeKey: 'p01pp010' },
+    kind: 'resource',
+    code: 'P01PP010',
+    description: 'Pintura plástica lisa mate, color a elegir, para interior, según UNE-EN 13300.',
+    unit: 'kg',
+    price: '3,74',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_EU_NAME,
+  },
+  {
+    ref: { source: SOURCE_EU, codeKey: 'u01aa010' },
+    kind: 'resource',
+    code: 'U01AA010',
+    description: 'Peón ordinario construcción, según convenio colectivo vigente.',
+    unit: 'h',
+    price: '16,90',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_EU_NAME,
+  },
+  {
+    ref: { source: SOURCE_RM, codeKey: 'e05hae020' },
+    kind: 'partida',
+    code: 'E05HAE020',
+    description: 'Viga de hormigón armado, de sección rectangular, realizado con hormigón HA-25/B/20/IIa y acero B 500 S, incluso encofrado y desencofrado.',
+    unit: 'm3',
+    price: '287,60',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_RM_NAME,
+  },
+  {
+    ref: { source: SOURCE_RM, codeKey: 'p03aa020' },
+    kind: 'resource',
+    code: 'P03AA020',
+    description: 'Acero corrugado B 500 S, suministrado en barras de 12 m, según UNE-EN 10080.',
+    unit: 'kg',
+    price: '0,98',
+    keywords: [],
+    expandedText: '',
+    sourceDisplayName: SOURCE_RM_NAME,
+  },
 ];
 
 function component(code) {
@@ -151,8 +241,11 @@ window.presto = {
     }
     return Promise.resolve(${JSON.stringify(IMPORT_OUTCOME)});
   },
-  async search() {
-    return { status: 'ok', items: ${JSON.stringify(CATALOG)} };
+  async search(request) {
+    const all = ${JSON.stringify(CATALOG)};
+    const limit = request?.limit ?? all.length;
+    const offset = request?.offset ?? 0;
+    return { status: 'ok', items: all.slice(offset, offset + limit), total: all.length, offset, limit };
   },
   async getDetail(ref) {
     if (ref.codeKey === ${JSON.stringify(CATALOG[0].ref.codeKey)}) return ${JSON.stringify(PARTIDA_DETAIL)};
@@ -233,6 +326,24 @@ const SCENES = [
       { name: '07-detalle-partida', width: 1280, height: 900 },
       { name: '08-detalle-angosto', width: 760, height: 900 },
     ],
+  },
+  {
+    name: 'paginacion',
+    stub: 'initial',
+    description: 'Result pager: the closing rule above the centred controls, then page two.',
+    expect: ['nav.results-pagination', 'p.results-page-status'],
+    drive: async ({ type, click }) => {
+      await type('muro');
+      await click('button[aria-label="Buscar"]');
+      await delay(400);
+    },
+    shots: [{ name: '10-paginacion-pagina-1', width: 1280, height: 900 }],
+    then: async ({ click }) => {
+      await click('button[aria-label="Página siguiente"]');
+      await delay(500);
+    },
+    thenExpect: ['nav.results-pagination'],
+    thenShots: [{ name: '11-paginacion-pagina-2', width: 1280, height: 900 }],
   },
   {
     name: 'alerta',
