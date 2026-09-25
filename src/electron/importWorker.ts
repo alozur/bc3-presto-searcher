@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { parentPort } from 'node:worker_threads';
 import type { SelectedSource } from '../application/ports';
 import { parseBc3 } from '../domain/bc3/parser';
@@ -12,14 +13,33 @@ type ImportRequest = { databasePath: string; selected: SelectedSource };
 
 port.on('message', async ({ databasePath, selected }: ImportRequest) => {
   try {
+    const repository = SqliteCatalogRepository.open(databasePath);
+    const contentHash = createHash('sha256').update(selected.bytes).digest('hex');
+    const unchanged = repository.findUnchangedImport(selected.source, contentHash);
+    if (unchanged) {
+      port.postMessage({
+        type: 'completed',
+        result: {
+          source: selected.source,
+          sourceDisplayName: unchanged.sourceDisplayName,
+          importedPartidas: unchanged.importedPartidas,
+          importedResources: unchanged.importedResources,
+          skippedRecords: 0,
+          diagnostics: [],
+          completedAt: unchanged.completedAt,
+          unchanged: true,
+        },
+      });
+      return;
+    }
+
     const throttle = createProgressThrottle((progress) => {
       port.postMessage({ type: 'progress', progress });
     });
 
     const snapshot = parseBc3(selected.bytes, selected.source, selected.displayName, throttle);
 
-    const repository = SqliteCatalogRepository.open(databasePath);
-    await repository.replaceSource(snapshot, (progress) => {
+    await repository.replaceSource({ ...snapshot, contentHash }, (progress) => {
       throttle({ stage: 'storing', ...progress });
     });
 

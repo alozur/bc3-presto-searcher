@@ -18,6 +18,7 @@ export type ImportResponse =
       skippedRecords: number;
       diagnostics: readonly ImportDiagnostic[];
       completedAt: string;
+      unchanged?: boolean;
     };
 export type PrestoApi = {
   importApprovedSource(): Promise<ImportResponse>;

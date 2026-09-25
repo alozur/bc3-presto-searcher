@@ -145,10 +145,47 @@ Known residual: after the file is chosen there is roughly 0.6 s with no feedback
 while the 26.6 MB payload is decoded and split before the first event. Removing
 that gap would need a new main-to-renderer signal when the dialog closes.
 
+## Work unit 5: skip a re-import of unchanged content
+
+Measured on the real workload: a re-import costs 125 s on a warm copy and 233 s
+right after the migrations, because it deletes and re-inserts 2.8 million
+identical rows. That work is pure waste when the selected file has not changed.
+
+The SHA-256 of the selected bytes is stored in a new `sources.content_hash`
+column inside the same transaction as the import, so a failed import can never
+leave a stored hash behind and a false "unchanged" is impossible. Before
+parsing anything the worker opens the repository so the migration runs, hashes
+the bytes, and asks `findUnchangedImport`. On a hit it posts `completed` with
+`unchanged: true` and the stored summary, with no parse, no delete, no insert,
+and no progress events. A NULL stored hash never matches, so sources imported by
+an older build are re-imported once and then carry a hash.
+
+The migration is guarded with `PRAGMA table_info(sources)` because SQLite has no
+`ADD COLUMN IF NOT EXISTS`, and the `sources` upsert was rewritten with explicit
+column names now that the table has five columns.
+
+The UI reports "el archivo no ha cambiado desde la última importación" with the
+original date, and suppresses the counts, the skipped-records line, and the
+diagnostics panel rather than presenting stored data as if it were re-measured.
+
+Verified end to end on a copy of the real 690 MB database in its pre-migration
+four-column shape: the column is added, all 83,330 items and 3,340,703 tokens
+survive, the lookup returns null before the first hashed import and 98 ms with
+the stored summary afterwards, and a different hash never matches.
+
+## Correction to an earlier diagnosis
+
+The import that appeared to hang had in fact committed successfully. Its stored
+`imported_at` of `2026-09-25T08:51:42.095Z` is UTC, which is 10:51:42 local,
+about 2 min 44 s after the app started at 10:48:58. The claim that nothing had
+committed came from inspecting the database with a read-only connection that was
+reading the main file without the WAL, so it saw a stale row. A `wal_checkpoint`
+run later made the committed value visible. There was never a hang.
+
 ## Review workload
 
-Work unit 3: 2 files, +18/-2. Work unit 4: 3 files, +12/-3. Branch total vs
-`main` is 17 files, +594/-42.
+Work unit 5: 8 modified files plus one new test file, about 190 changed lines.
+Branch total vs `main` is 18 files, roughly +770/-45.
 
 ## Allowed edit surfaces
 

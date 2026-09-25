@@ -258,7 +258,11 @@ export function App() {
           </ol>
         </>}
       {importResult && !imported(importResult) && <p>La importación fue cancelada.</p>}
-      {importResult && imported(importResult) && <div role="status">
+      {importResult && imported(importResult) && importResult.unchanged === true && <div role="status">
+        <p><strong>{importResult.sourceDisplayName}</strong>: el archivo no ha cambiado desde la última importación.</p>
+        <p>Ya estaba importado: {new Date(importResult.completedAt).toLocaleString('es-ES')}.</p>
+      </div>}
+      {importResult && imported(importResult) && importResult.unchanged !== true && <div role="status">
         <p><strong>{importResult.sourceDisplayName}</strong>: {importResult.importedPartidas} partidas y {importResult.importedResources} recursos importados.</p>
         <p>Registros omitidos: {importResult.skippedRecords}. Importado: {new Date(importResult.completedAt).toLocaleString('es-ES')}.</p>
         {importResult.diagnostics.length > 0 && <section className="import-diagnostics-panel" aria-label="Panel de diagnósticos de importación" tabIndex={0}>

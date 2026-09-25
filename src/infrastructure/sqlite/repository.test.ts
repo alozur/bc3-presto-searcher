@@ -1,7 +1,9 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 import { GetItemDetail, ImportApprovedSource, SearchCatalog } from '../../application/useCases';
 import { parseBc3 } from '../../domain/bc3/parser';
 import type { ImportSnapshot, SourceKey } from '../../domain/catalog';
@@ -108,5 +110,56 @@ describe('SQLite catalog persistence', () => {
     expect(await repo.getDetail({ source: 'guadalajara-2016-eu', codeKey: 'e-original' })).toBeNull();
     expect(await repo.getDetail({ source: 'guadalajara-2016-eu', codeKey: 'e-replacement' })).not.toBeNull();
     expect(await repo.getDetail({ source: 'guadalajara-2016-rm', codeKey: 'rm-only' })).not.toBeNull();
+  });
+
+  const sourceColumns = (path: string) => new Database(path).prepare('PRAGMA table_info(sources)').all() as { name: string }[];
+
+  it('adds the content_hash column to a fresh database', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bc3-repository-')), 'catalog.sqlite');
+    SqliteCatalogRepository.open(path);
+    expect(sourceColumns(path).map((column) => column.name)).toContain('content_hash');
+  });
+
+  it('migrates a pre-content_hash database and keeps the migration idempotent on reopen', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bc3-repository-')), 'legacy.sqlite');
+    const legacy = new Database(path);
+    legacy.exec('CREATE TABLE sources(source_key TEXT PRIMARY KEY,display_name TEXT NOT NULL,imported_at TEXT NOT NULL,item_count INTEGER NOT NULL)');
+    legacy.prepare('INSERT INTO sources VALUES(?,?,?,?)').run('guadalajara-2016-eu', 'legacy.bc3', '2024-01-01T00:00:00.000Z', 7);
+    legacy.close();
+
+    const repo = SqliteCatalogRepository.open(path);
+    expect(sourceColumns(path).map((column) => column.name)).toContain('content_hash');
+    const row = new Database(path).prepare('SELECT source_key,display_name,imported_at,item_count FROM sources').get() as Record<string, unknown>;
+    expect(row).toEqual({ source_key: 'guadalajara-2016-eu', display_name: 'legacy.bc3', imported_at: '2024-01-01T00:00:00.000Z', item_count: 7 });
+
+    const reopened = SqliteCatalogRepository.open(path);
+    expect(sourceColumns(path).filter((column) => column.name === 'content_hash')).toHaveLength(1);
+    expect(reopened.findUnchangedImport('guadalajara-2016-eu', 'any-hash')).toBeNull();
+  });
+
+  it('finds unchanged imports by content hash and rejects other hashes, sources, or missing hashes', async () => {
+    const repo = SqliteCatalogRepository.open(':memory:');
+    const hashed: ImportSnapshot = { ...singleResource('guadalajara-2016-eu', 'E-HASHED'), contentHash: 'hash-1' };
+    await repo.replaceSource(hashed);
+
+    expect(repo.findUnchangedImport('guadalajara-2016-eu', 'hash-1')).toEqual({
+      sourceDisplayName: 'E-HASHED.bc3',
+      importedPartidas: 0,
+      importedResources: 1,
+      completedAt: expect.any(String),
+    });
+    expect(repo.findUnchangedImport('guadalajara-2016-eu', 'hash-2')).toBeNull();
+    expect(repo.findUnchangedImport('guadalajara-2016-rm', 'hash-1')).toBeNull();
+
+    await repo.replaceSource(singleResource('guadalajara-2016-rm', 'E-PLAIN'));
+    expect(repo.findUnchangedImport('guadalajara-2016-rm', 'hash-1')).toBeNull();
+  });
+
+  it('stores and matches a sha-256 content hash through a full import cycle', async () => {
+    const repo = SqliteCatalogRepository.open(':memory:');
+    const bytes = new TextEncoder().encode('~C|E-CYCLE|u|Cycle|1|x|0|\n');
+    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    await repo.replaceSource({ ...singleResource('guadalajara-2016-eu', 'E-CYCLE'), contentHash });
+    expect(repo.findUnchangedImport('guadalajara-2016-eu', contentHash)).not.toBeNull();
   });
 });

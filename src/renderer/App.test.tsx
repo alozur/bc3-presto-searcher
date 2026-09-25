@@ -109,6 +109,29 @@ describe('Presto catalog screen', () => {
     expect(panelRule).toMatch(/overflow-wrap:\s*anywhere;/);
   });
 
+  it('reports unchanged imports without counts, skipped records, or diagnostics', async () => {
+    const api: PrestoApi = {
+      importApprovedSource: vi.fn(async () => ({ source: 'guadalajara-2016-eu' as const, sourceDisplayName: 'catalog.bc3', importedPartidas: 12, importedResources: 34, skippedRecords: 0, diagnostics: [{ code: 'ignored-record', sourceDisplayName: 'catalog.bc3', line: 3, messageEs: 'Registro omitido que no debe mostrarse.' }], completedAt: '2025-01-01T00:00:00.000Z', unchanged: true })),
+      onImportProgress: vi.fn(() => () => undefined),
+      search: vi.fn(async () => ({ status: 'empty-query' as const })),
+      getDetail: vi.fn(async () => null),
+    };
+    await render(api);
+
+    await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]')!));
+
+    const status = container.querySelector('div[role="status"]')!;
+    expect(status).toBeTruthy();
+    expect(status.textContent).toContain('catalog.bc3');
+    expect(status.textContent).toContain('no ha cambiado');
+    expect(status.textContent).toContain('Ya estaba importado:');
+    expect(status.textContent).toContain(new Date('2025-01-01T00:00:00.000Z').toLocaleString('es-ES'));
+    expect(container.textContent).not.toContain('12 partidas y 34 recursos importados');
+    expect(container.textContent).not.toContain('Registros omitidos:');
+    expect(container.textContent).not.toContain('Registro omitido que no debe mostrarse.');
+    expect(container.querySelector('section.import-diagnostics-panel')).toBeNull();
+  });
+
   it('shows complete import activity while search remains available and clears it after success', async () => {
     let reportProgress: ((progress: ImportProgress) => void) | undefined;
     let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
