@@ -40,14 +40,16 @@ function boundedLimit(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(100, Math.trunc(value))) : 100;
 }
 
-// An offset past the end is served the last reachable window instead of an empty
-// one, and `offset` reports what was served. Without this, a shrinking match set
-// (a re-import, or a query edited while paged) renders "N resultados." above an
-// empty list with no pager.
+// A request that would land past the end is served the last whole window instead
+// of an empty one, and `offset` reports what was served. Without this, a shrinking
+// match set (a re-import, or a query edited while paged) renders "N resultados."
+// above an empty list with no pager. An in-range request is honored exactly, even
+// when it is not aligned to the window size.
 function boundedOffset(value: number | undefined, total: number, limit: number) {
   const requested = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
-  const lastWindow = total > 0 ? Math.floor((total - 1) / limit) * limit : 0;
-  return Math.min(requested, lastWindow);
+  if (total === 0) return 0;
+  if (requested <= total - 1) return requested;
+  return Math.floor((total - 1) / limit) * limit;
 }
 
 export class SearchCatalog {

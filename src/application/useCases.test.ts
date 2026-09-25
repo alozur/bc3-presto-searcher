@@ -40,6 +40,20 @@ describe('application use cases', () => {
     const unaligned = await useCase.execute('x', { limit: 10, offset: 7 });
     expect(unaligned.status === 'ok' && unaligned.offset).toBe(7);
   });
+  it('honors in-range unaligned offsets exactly and serves the last whole window only past the end', async () => {
+    const r = repo();
+    r.findSearchCandidates = vi.fn(async () => ranked(25));
+    const useCase = new SearchCatalog(r);
+    const defaultLimit = await useCase.execute('x', { limit: 100, offset: 5 });
+    expect(defaultLimit.status === 'ok' && defaultLimit.items.map((candidate) => candidate.code)).toEqual(['C06', 'C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21', 'C22', 'C23', 'C24', 'C25']);
+    expect(defaultLimit.status === 'ok' && { total: defaultLimit.total, offset: defaultLimit.offset, limit: defaultLimit.limit }).toEqual({ total: 25, offset: 5, limit: 100 });
+    const single = await useCase.execute('x', { limit: 10, offset: 24 });
+    expect(single.status === 'ok' && single.items.map((candidate) => candidate.code)).toEqual(['C25']);
+    expect(single.status === 'ok' && single.offset).toBe(24);
+    const past = await useCase.execute('x', { limit: 10, offset: 25 });
+    expect(past.status === 'ok' && past.items.map((candidate) => candidate.code)).toEqual(['C21', 'C22', 'C23', 'C24', 'C25']);
+    expect(past.status === 'ok' && past.offset).toBe(20);
+  });
   it('snaps a shrunken match set to its last window and an empty result to offset zero', async () => {
     const r = repo();
     r.findSearchCandidates = vi.fn(async () => ranked(11));
