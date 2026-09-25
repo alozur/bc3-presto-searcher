@@ -234,18 +234,20 @@ export function App() {
   }
 
   return <main>
-    <header>
+    <header className="app-masthead">
       <h1>Presto Search</h1>
       <p>Buscador local de partidas y recursos BC3 importados.</p>
     </header>
 
-    <section aria-labelledby="import-title">
+    <section aria-labelledby="import-title" className="panel">
       <h2 id="import-title">Importar catálogo</h2>
-      <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
-      <label className="import-completion-sound">
-        <input type="checkbox" checked={completionSoundEnabled} onChange={(event) => toggleCompletionSound(event.target.checked)} />
-        Emitir un sonido al terminar
-      </label>
+      <div className="import-actions">
+        <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
+        <label className="import-completion-sound">
+          <input type="checkbox" checked={completionSoundEnabled} onChange={(event) => toggleCompletionSound(event.target.checked)} />
+          Emitir un sonido al terminar
+        </label>
+      </div>
       {importActivity.status === 'pending' && importActivity.progress !== null && <>
           <p role="status">Importación en curso. {progressMessage(importActivity.progress)}</p>
           {(() => {
@@ -289,11 +291,13 @@ export function App() {
       </div>}
     </section>
 
-    <section aria-labelledby="search-title">
+    <section aria-labelledby="search-title" className="panel">
       <h2 id="search-title">Buscar</h2>
       <label htmlFor="search-query">Términos de búsqueda</label>
-      <input id="search-query" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void search()} />
-      <button aria-label="Buscar" onClick={() => void search()}>Buscar</button>
+      <div className="search-row">
+        <input id="search-query" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void search()} />
+        <button aria-label="Buscar" onClick={() => void search()}>Buscar</button>
+      </div>
       {searchResult?.status === 'empty-query' && <p role="status">Introduzca uno o más términos de búsqueda.</p>}
       {searchResult?.status === 'ok' && <>
         <p>{searchResult.items.length} resultados.</p>
@@ -304,7 +308,7 @@ export function App() {
             const visibleDetail = selectedIdentity === identity && detail && itemIdentity(detail.item.ref) === identity ? detail : null;
             return <li key={identity}>
               <button id={ids.button} aria-expanded={selectedIdentity === identity} aria-controls={ids.detail} aria-label={`Ver detalle ${item.code}`} onClick={() => void openDetail(item.ref)}>
-                <strong>{item.kind === 'partida' ? 'Partida' : 'Recurso'}</strong> {item.code}
+                <strong className="result-kind">{item.kind === 'partida' ? 'Partida' : 'Recurso'}</strong> <span className="result-code">{item.code}</span>
               </button>
               <p>{item.description}</p>
               <small>{item.unit} · {item.price} · Fuente: {item.sourceDisplayName}</small>
