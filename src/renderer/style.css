@@ -33,7 +33,10 @@ progress {
 .import-milestones {
   max-height: 12rem;
   margin: .5rem 0;
-  padding: .5rem .75rem;
+  /* Room for the markers: a shorthand padding would clobber the default
+     padding-inline-start the list markers are painted into, and overflow-x:
+     hidden would then clip them. */
+  padding: .5rem .75rem .5rem 1.75rem;
   border: 1px solid #d8dee8;
   border-radius: .5rem;
   background: #f8fafc;
