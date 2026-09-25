@@ -568,6 +568,24 @@ describe('Presto catalog screen', () => {
     expect(search).toHaveBeenLastCalledWith({ query: 'x', limit: 10, offset: 10 });
   });
 
+  it('keeps the renderer coherent when the match set shrinks below the current offset', async () => {
+    const all = candidates(25);
+    const search = pagedSearch(all);
+    await showResults(apiWithSearch(search, vi.fn(async () => null)));
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('Página 2 de 3');
+    // The catalog shrank to 3 matches (a re-import, or the query was edited
+    // without submitting): the fixed backend serves the last reachable window
+    // for whatever offset the pager requests, so any further request resolves
+    // with the window that backend actually serves.
+    search.mockImplementation(async () => ({ status: 'ok' as const, items: all.slice(0, 3), total: 3, offset: 0, limit: 10 }));
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('3 resultados.');
+    expect(container.querySelectorAll('ul.results li')).toHaveLength(3);
+    expect(container.querySelector('nav.results-pagination')).toBeNull();
+    expect(container.textContent).not.toMatch(/Página \d+ de \d+/);
+  });
+
   it('hides the pager when all results fit a single page', async () => {
     await showResults(apiWithSearch(pagedSearch(candidates(3)), vi.fn(async () => null)));
     expect(container.querySelector('nav.results-pagination')).toBeNull();

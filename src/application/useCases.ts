@@ -40,8 +40,14 @@ function boundedLimit(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(100, Math.trunc(value))) : 100;
 }
 
-function boundedOffset(value: number | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+// An offset past the end is served the last reachable window instead of an empty
+// one, and `offset` reports what was served. Without this, a shrinking match set
+// (a re-import, or a query edited while paged) renders "N resultados." above an
+// empty list with no pager.
+function boundedOffset(value: number | undefined, total: number, limit: number) {
+  const requested = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  const lastWindow = total > 0 ? Math.floor((total - 1) / limit) * limit : 0;
+  return Math.min(requested, lastWindow);
 }
 
 export class SearchCatalog {
@@ -52,7 +58,7 @@ export class SearchCatalog {
     const candidates = await this.repo.findSearchCandidates(tokens);
     const ranked = rankCandidates(candidates, tokens);
     const limit = boundedLimit(page.limit);
-    const offset = boundedOffset(page.offset);
+    const offset = boundedOffset(page.offset, ranked.length, limit);
     return { status: 'ok' as const, items: ranked.slice(offset, offset + limit), total: ranked.length, offset, limit };
   }
 }
