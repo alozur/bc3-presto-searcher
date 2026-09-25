@@ -1,5 +1,10 @@
 const storageKey = 'presto.import.completion-sound';
 
+// Peak gain of the chime. The original 0.08 was about -22 dB and was barely
+// audible on ordinary speakers; this sits around -6 dB, loud enough to notice
+// from across the room without being startling. Tune here.
+const chimePeakGain = 0.5;
+
 // Session-only fallback for environments where localStorage throws
 // (disabled storage, quota errors, opaque origins).
 let inMemoryValue: boolean | null = null;
@@ -49,7 +54,7 @@ export function playCompletionSound(): void {
       oscillator.type = 'sine';
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.08, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(chimePeakGain, at + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
       oscillator.connect(gain);
       gain.connect(context.destination);
