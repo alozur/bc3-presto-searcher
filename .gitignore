@@ -35,3 +35,6 @@ openspec/
 
 # Local Pi runtime state
 .atl/
+
+# Local visual probe screenshots
+.visual-probe/

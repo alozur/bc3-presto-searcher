@@ -243,9 +243,23 @@ No aria attribute, no visible text, and no state logic may change.
   - Visual verification: headless-Chromium probe captured 9 reachable states at 1280px and
     760px (initial, import in progress, indeterminate stage, import outcome with
     diagnostics, results with hover, expanded partida detail, narrow detail, error alert).
-- Notes: the probe (`/home/alozur/.cache/tmp-presto/visual/probe.mjs`) lives outside the
-  repository on purpose and injects a `window.presto` stub over CDP before the bundle
-  evaluates. It is not part of this diff; see `## Not in this change`.
+- Notes: the probe injects a `window.presto` stub over CDP before the bundle evaluates,
+  served the built renderer over HTTP, and drove the real app with real events. It later
+  moved into the repository as task 4.
+
+### 4. Ship the visual probe as a repository tool
+- Status: done
+- Evidence: `tools/visual-probe/probe.mjs` (self-contained, zero dependencies: Node 22's
+  global `WebSocket`), `tools/visual-probe/README.md`, a `probe` script in `package.json`,
+  and `.visual-probe/` in `.gitignore`. `pnpm build && pnpm probe` runs 6 scenes, captures
+  9 states at two widths plus a 6-sample time series of the indeterminate bar, and asserts
+  one contract selector per state. Verified: exit 0 with no failed expectation, 24 PNGs,
+  the Chromium profile cleaned up, and the suite still 116/116 with a clean `tsc`.
+- Notes: `clip.scale` is mandatory in this Chromium's CDP schema and multiplies with the
+  device scale factor, so it must be an explicit `1` (omitting it is a protocol error,
+  passing `2` silently yields 4x images). Killing Chromium only *requests* termination, so
+  the profile is deleted after the exit event and the delete retries the ENOTEMPTY race; a
+  leftover cache must never turn a successful capture run into a failure.
 
 ## Review round (parent, after the writer returned)
 
@@ -282,8 +296,8 @@ The visual probe found three defects that no test could catch. All three are fix
 
 ## Not in this change
 
-- The visual probe harness is instrumentation, not product code, and stays outside the
-  repository.
+- The visual probe harness shipped as its own follow-up work unit under
+  `tools/visual-probe/`, not in this diff.
 - `/tmp` in this environment is a tmpfs with an exhausted per-user quota: `pnpm test` and
   pi's extension loader both fail there with `Unknown system error -122` / `EDQUOT` unless
   `TMPDIR` points under `/home`. Worth documenting in the repository so the next agent does
