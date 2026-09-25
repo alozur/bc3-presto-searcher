@@ -57,3 +57,27 @@ progress {
   overflow-wrap: anywhere;
 }
 .import-milestones li { margin: .25rem 0; }
+
+/* Result pager. Self-contained so a later renderer restyle can re-adopt it. */
+.results-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem 1rem;
+  margin-top: 1rem;
+}
+/* The global button rule right-pads every button; inside the centred flex row
+   that trailing margin would break the centring. */
+.results-pagination button {
+  margin: 0;
+}
+.results-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+.results-page-status {
+  margin: 0;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}

@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemDetail, SearchCandidate, SearchResponse } from '../domain/catalog';
-import type { ImportProgress, PrestoApi } from '../shared/ipc';
+import type { ImportProgress, PrestoApi, SearchRequest } from '../shared/ipc';
 import { App } from './App';
 import { isCompletionSoundEnabled, playCompletionSound, setCompletionSoundEnabled } from './completionSound';
 
@@ -262,7 +262,7 @@ describe('Presto catalog screen', () => {
     expect(searchButton.disabled).toBe(false);
     await act(async () => enterText(input, 'barniz'));
     await act(async () => click(searchButton));
-    expect(api.search).toHaveBeenCalledWith({ query: 'barniz' });
+    expect(api.search).toHaveBeenCalledWith({ query: 'barniz', limit: 10, offset: 0 });
 
     await act(async () => reportProgress?.({ stage: 'processing-records', completed: 4, total: 4 }));
     expect(loadingStatus()?.textContent).toBe('Importación en curso. Procesando registros BC3: 100 %');
@@ -402,6 +402,22 @@ describe('Presto catalog screen', () => {
     return { importApprovedSource: vi.fn(async () => ({ status: 'cancelled' as const })), onImportProgress: vi.fn(() => () => undefined), search: vi.fn(async () => search), getDetail };
   }
 
+  function candidates(count: number) {
+    return Array.from({ length: count }, (_, index) => item('guadalajara-2016-eu', `c${String(index + 1).padStart(2, '0')}`, `C${String(index + 1).padStart(2, '0')}`));
+  }
+
+  function pagedSearch(all: SearchCandidate[], total = all.length) {
+    return vi.fn(async (request: SearchRequest) => {
+      const offset = request.offset ?? 0;
+      const limit = request.limit ?? 100;
+      return { status: 'ok' as const, items: all.slice(offset, offset + limit), total, offset, limit };
+    });
+  }
+
+  function apiWithSearch(search: PrestoApi['search'], getDetail: PrestoApi['getDetail']): PrestoApi {
+    return { importApprovedSource: vi.fn(async () => ({ status: 'cancelled' as const })), onImportProgress: vi.fn(() => () => undefined), search, getDetail };
+  }
+
   async function showResults(api: PrestoApi) {
     await render(api);
     const input = container.querySelector<HTMLInputElement>('#search-query')!;
@@ -527,5 +543,89 @@ describe('Presto catalog screen', () => {
     expect(buttons[0].getAttribute('aria-expanded')).toBe('false');
     expect(buttons[1].getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('pages results ten at a time through adjacent windows', async () => {
+    const all = candidates(25);
+    const search = pagedSearch(all);
+    await showResults(apiWithSearch(search, vi.fn(async () => null)));
+    expect(container.querySelectorAll('ul.results li')).toHaveLength(10);
+    expect(container.textContent).toContain('25 resultados.');
+    expect(container.textContent).toContain('Página 1 de 3');
+    expect((container.querySelector('button[aria-label="Página anterior"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((container.querySelector('button[aria-label="Página siguiente"]') as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(search).toHaveBeenCalledWith({ query: 'x', limit: 10, offset: 10 });
+    expect(container.querySelector('ul.results li')?.textContent).toContain('C11');
+    expect(container.textContent).toContain('Página 2 de 3');
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('Página 3 de 3');
+    expect(container.querySelectorAll('ul.results li')).toHaveLength(5);
+    expect((container.querySelector('button[aria-label="Página siguiente"]') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => click(container.querySelector('button[aria-label="Página anterior"]')!));
+    expect(container.textContent).toContain('Página 2 de 3');
+    expect(container.querySelector('ul.results li')?.textContent).toContain('C11');
+    expect(search).toHaveBeenLastCalledWith({ query: 'x', limit: 10, offset: 10 });
+  });
+
+  it('hides the pager when all results fit a single page', async () => {
+    await showResults(apiWithSearch(pagedSearch(candidates(3)), vi.fn(async () => null)));
+    expect(container.querySelector('nav.results-pagination')).toBeNull();
+    expect(container.textContent).not.toContain('Página 1 de');
+  });
+
+  it('returns to the first window when a new search is issued', async () => {
+    const all = candidates(25);
+    const search = pagedSearch(all);
+    await showResults(apiWithSearch(search, vi.fn(async () => null)));
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('Página 2 de 3');
+    await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
+    expect(search).toHaveBeenLastCalledWith({ query: 'x', limit: 10, offset: 0 });
+    expect(container.textContent).toContain('Página 1 de 3');
+  });
+
+  it('clears the open detail when the page changes', async () => {
+    const all = candidates(25);
+    await showResults(apiWithSearch(pagedSearch(all), vi.fn(async (ref) => partidaDetail(all.find((candidate) => candidate.ref.codeKey === ref.codeKey)!))));
+    await act(async () => click(container.querySelector('button[aria-label="Ver detalle C01"]')!));
+    expect(container.querySelector('section.result-detail')).toBeTruthy();
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.querySelector('section.result-detail')).toBeNull();
+  });
+
+  it('drops a stale page response that loses to a newer search', async () => {
+    const all = candidates(25);
+    let deferredResolve: ((value: SearchResponse) => void) | undefined;
+    let call = 0;
+    const search = vi.fn((request: SearchRequest): Promise<SearchResponse> => {
+      call += 1;
+      if (call === 3) {
+        return new Promise((resolve) => { deferredResolve = resolve; });
+      }
+      const offset = request.offset ?? 0;
+      const limit = request.limit ?? 100;
+      return Promise.resolve({ status: 'ok', items: all.slice(offset, offset + limit), total: all.length, offset, limit });
+    });
+    await showResults(apiWithSearch(search, vi.fn(async () => null)));
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('Página 2 de 3');
+    await act(async () => click(container.querySelector('button[aria-label="Página siguiente"]')!));
+    expect(container.textContent).toContain('Página 2 de 3');
+    await act(async () => click(container.querySelector('button[aria-label="Buscar"]')!));
+    expect(container.textContent).toContain('Página 1 de 3');
+    expect(container.querySelectorAll('ul.results li')).toHaveLength(10);
+    expect(container.querySelector('ul.results li')?.textContent).toContain('C01');
+    await act(async () => deferredResolve?.({ status: 'ok', items: all.slice(20, 30), total: all.length, offset: 20, limit: 10 }));
+    expect(container.textContent).toContain('Página 1 de 3');
+    expect(container.querySelectorAll('ul.results li')).toHaveLength(10);
+    expect(container.querySelector('ul.results li')?.textContent).toContain('C01');
+  });
+
+  it('neutralises the global button margin inside the centred pager row', () => {
+    const rendererCss = readFileSync('src/renderer/style.css', 'utf8');
+    const pagerButtonRule = rendererCss.match(/\.results-pagination button\s*\{([^}]*)\}/)?.[1];
+    expect(pagerButtonRule).toBeDefined();
+    expect(pagerButtonRule).toMatch(/margin:\s*0;/);
   });
 });
