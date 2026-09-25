@@ -1,9 +1,9 @@
 import type { SelectedSource } from '../application/ports';
-import type { ImportResponse } from '../shared/ipc';
+import type { ImportProgress, ImportResponse } from '../shared/ipc';
 
-export type ImportProgress = { phase: 'parsing' | 'storing' };
+export type { ImportProgress } from '../shared/ipc';
 type WorkerMessage =
-  | { type: 'progress'; phase: ImportProgress['phase'] }
+  | { type: 'progress'; progress: ImportProgress }
   | { type: 'completed'; result: Exclude<ImportResponse, { status: 'cancelled' }> }
   | { type: 'failed'; message: string };
 
@@ -30,7 +30,7 @@ export function createBackgroundImporter({ createWorker }: { createWorker: () =>
 
         worker.on('message', (message: unknown) => {
           const event = message as WorkerMessage;
-          if (event.type === 'progress') reportProgress({ phase: event.phase });
+          if (event.type === 'progress' && !settled) reportProgress(event.progress);
           if (event.type === 'completed') finish(() => resolve(event.result));
           if (event.type === 'failed') finish(() => reject(new Error(event.message)));
         });

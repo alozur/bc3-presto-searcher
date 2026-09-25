@@ -4,7 +4,10 @@ export const IPC_CHANNELS = { import: 'presto:import', importProgress: 'presto:i
 
 export type SearchRequest = { query: string; limit?: number };
 export type DetailRequest = ItemRef;
-export type ImportProgress = { phase: 'parsing' | 'storing' };
+export type ImportProgress =
+  | { stage: 'processing-records'; completed: number; total: number }
+  | { stage: 'validating-relations' }
+  | { stage: 'storing'; completed: number; total: number };
 export type ImportResponse =
   | { status: 'cancelled' }
   | {

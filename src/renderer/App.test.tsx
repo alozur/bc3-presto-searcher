@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ItemDetail, SearchCandidate, SearchResponse } from '../domain/catalog';
-import type { PrestoApi } from '../shared/ipc';
+import type { ImportProgress, PrestoApi } from '../shared/ipc';
 import { App } from './App';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -110,7 +110,7 @@ describe('Presto catalog screen', () => {
   });
 
   it('shows complete import activity while search remains available and clears it after success', async () => {
-    let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
+    let reportProgress: ((progress: ImportProgress) => void) | undefined;
     let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
     const api: PrestoApi = {
       importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((resolve) => { completeImport = resolve; })),
@@ -133,24 +133,28 @@ describe('Presto catalog screen', () => {
     await act(async () => click(searchButton));
     expect(api.search).toHaveBeenCalledWith({ query: 'barniz' });
 
-    await act(async () => reportProgress?.({ phase: 'parsing' }));
-    expect(loadingStatus()?.textContent).toBe('Importación en curso. Analizando el catálogo BC3.');
+    await act(async () => reportProgress?.({ stage: 'processing-records', completed: 4, total: 4 }));
+    expect(loadingStatus()?.textContent).toContain('Procesando registros BC3: 100 %');
+    await act(async () => reportProgress?.({ stage: 'validating-relations' }));
+    expect(loadingStatus()?.textContent).toContain('Validando relaciones del catálogo…');
+    expect(container.querySelector('[aria-label="Etapas de importación"]')?.textContent).toContain('Procesando registros BC3: 100 %: Completado.');
     expect(importButton.disabled).toBe(true);
-    await act(async () => reportProgress?.({ phase: 'storing' }));
-    expect(loadingStatus()?.textContent).toBe('Importación en curso. Guardando el catálogo para buscarlo.');
+    await act(async () => reportProgress?.({ stage: 'storing', completed: 3, total: 6 }));
+    expect(loadingStatus()?.textContent).toContain('Operaciones de guardado: 50 %');
+    expect(container.querySelector('[aria-label="Etapas de importación"]')?.textContent).toContain('Validando relaciones del catálogo…: Completado.');
     expect(importButton.disabled).toBe(true);
 
     await act(async () => completeImport?.({ source: 'guadalajara-2016-eu', sourceDisplayName: 'Guadalajara2016_e+u.bc3', importedPartidas: 1, importedResources: 3, skippedRecords: 0, diagnostics: [], completedAt: '2025-01-01T00:00:00.000Z' }));
     expect(loadingStatus()).toBeNull();
     expect(importButton.disabled).toBe(false);
     expect(container.textContent).toContain('1 partidas y 3 recursos importados');
-    await act(async () => reportProgress?.({ phase: 'parsing' }));
+    await act(async () => reportProgress?.({ stage: 'processing-records', completed: 1, total: 1 }));
     expect(loadingStatus()).toBeNull();
     expect(importButton.disabled).toBe(false);
   });
 
   it('clears import activity while preserving cancellation feedback', async () => {
-    let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
+    let reportProgress: ((progress: ImportProgress) => void) | undefined;
     let completeImport: ((response: Awaited<ReturnType<PrestoApi['importApprovedSource']>>) => void) | undefined;
     const api: PrestoApi = {
       importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((resolve) => { completeImport = resolve; })),
@@ -162,7 +166,7 @@ describe('Presto catalog screen', () => {
     const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
 
     await act(async () => click(importButton));
-    await act(async () => reportProgress?.({ phase: 'parsing' }));
+    await act(async () => reportProgress?.({ stage: 'processing-records', completed: 1, total: 1 }));
     await act(async () => completeImport?.({ status: 'cancelled' }));
 
     expect(container.querySelector('section[aria-labelledby="import-title"] > p[role="status"]')).toBeNull();
@@ -171,7 +175,7 @@ describe('Presto catalog screen', () => {
   });
 
   it('clears import activity while preserving rejection feedback', async () => {
-    let reportProgress: ((progress: { phase: 'parsing' | 'storing' }) => void) | undefined;
+    let reportProgress: ((progress: ImportProgress) => void) | undefined;
     let rejectImport: ((reason?: unknown) => void) | undefined;
     const api: PrestoApi = {
       importApprovedSource: vi.fn(() => new Promise<Awaited<ReturnType<PrestoApi['importApprovedSource']>>>((_resolve, reject) => { rejectImport = reject; })),
@@ -183,7 +187,7 @@ describe('Presto catalog screen', () => {
     const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
 
     await act(async () => click(importButton));
-    await act(async () => reportProgress?.({ phase: 'storing' }));
+    await act(async () => reportProgress?.({ stage: 'storing', completed: 1, total: 1 }));
     await act(async () => rejectImport?.(new Error('failed import')));
 
     expect(container.querySelector('section[aria-labelledby="import-title"] > p[role="status"]')).toBeNull();

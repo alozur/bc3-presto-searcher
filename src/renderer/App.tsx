@@ -5,18 +5,42 @@ import { presentBreakdownQuantity } from './productivity';
 
 type RendererWindow = Window & typeof globalThis & { presto?: PrestoApi };
 
+type ProcessingProgress = Extract<ImportProgress, { stage: 'processing-records' }>;
 type ImportActivity =
   | { status: 'idle' }
-  | { status: 'pending'; phase: ImportProgress['phase'] | null };
+  | { status: 'pending'; progress: ImportProgress | null; recordsProgress: ProcessingProgress | null };
+
+const importStages: ImportProgress['stage'][] = ['processing-records', 'validating-relations', 'storing'];
+
+function stageIndex(stage: ImportProgress['stage']) {
+  return importStages.indexOf(stage);
+}
+
+function measuredPercent({ completed, total }: { completed: number; total: number }) {
+  return total > 0 ? Math.min(100, Math.max(0, Math.floor((completed * 100) / total))) : null;
+}
 
 function imported(response: ImportResponse): response is Exclude<ImportResponse, { status: 'cancelled' }> {
   return !('status' in response);
 }
 
-function progressMessage(phase: ImportProgress['phase'] | null) {
-  if (phase === 'parsing') return 'Analizando el catálogo BC3.';
-  if (phase === 'storing') return 'Guardando el catálogo para buscarlo.';
+function progressMessage(progress: ImportProgress | null) {
+  if (progress?.stage === 'processing-records') {
+    const percent = measuredPercent(progress);
+    return percent === null ? 'Procesando registros BC3.' : `Procesando registros BC3: ${percent} %`;
+  }
+  if (progress?.stage === 'validating-relations') return 'Validando relaciones del catálogo…';
+  if (progress?.stage === 'storing') {
+    const percent = measuredPercent(progress);
+    return percent === null ? 'Operaciones de guardado.' : `Operaciones de guardado: ${percent} %`;
+  }
   return 'Esperando la selección del archivo BC3.';
+}
+
+function stageMessage(stage: ImportProgress['stage'], recordsProgress: ProcessingProgress | null) {
+  if (stage === 'processing-records') return progressMessage(recordsProgress);
+  if (stage === 'validating-relations') return 'Validando relaciones del catálogo…';
+  return 'Operaciones de guardado.';
 }
 
 function itemIdentity(ref: ItemRef) {
@@ -62,9 +86,17 @@ export function App() {
   const api = (window as RendererWindow).presto;
 
   useEffect(() => api?.onImportProgress((progress) => {
-    setImportActivity((current) => current.status === 'pending'
-      ? { status: 'pending', phase: progress.phase }
-      : current);
+    setImportActivity((current) => {
+      if (current.status !== 'pending') return current;
+      const previous = current.progress;
+      if (previous && stageIndex(progress.stage) < stageIndex(previous.stage)) return current;
+      if (progress.stage === 'processing-records' && current.recordsProgress && progress.completed < current.recordsProgress.completed) return current;
+      return {
+        status: 'pending',
+        progress,
+        recordsProgress: progress.stage === 'processing-records' ? progress : current.recordsProgress,
+      };
+    });
   }), [api]);
 
   function clearDetailSelection() {
@@ -78,7 +110,7 @@ export function App() {
     setMessage(null);
     clearDetailSelection();
     setImportResult(null);
-    setImportActivity({ status: 'pending', phase: null });
+    setImportActivity({ status: 'pending', progress: null, recordsProgress: null });
     try {
       setImportResult(await api.importApprovedSource());
     } catch {
@@ -137,7 +169,16 @@ export function App() {
     <section aria-labelledby="import-title">
       <h2 id="import-title">Importar catálogo</h2>
       <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
-      {importing && <p role="status">Importación en curso. {progressMessage(importActivity.phase)}</p>}
+      {importing && <>
+          <p role="status">Importación en curso. {progressMessage(importActivity.progress)}</p>
+          <ol aria-label="Etapas de importación">
+            {importStages.map((stage) => {
+              const currentStage = importActivity.progress?.stage;
+              const state = currentStage === stage ? 'En curso' : currentStage && stageIndex(stage) < stageIndex(currentStage) ? 'Completado' : 'Pendiente';
+              return <li key={stage}>{stageMessage(stage, importActivity.recordsProgress)}: {state}.</li>;
+            })}
+          </ol>
+        </>}
       {importResult && !imported(importResult) && <p>La importación fue cancelada.</p>}
       {importResult && imported(importResult) && <div role="status">
         <p><strong>{importResult.sourceDisplayName}</strong>: {importResult.importedPartidas} partidas y {importResult.importedResources} recursos importados.</p>

@@ -51,7 +51,19 @@ describe('SQLite catalog persistence', () => {
     });
   });
 
-  it('replaces only the imported source and retains its prior data when a replacement fails', async () => {
+  it('reports monotonic persistence progress from explicit write operations before committing', async () => {
+      const repo = SqliteCatalogRepository.open(':memory:');
+      const progress: { completed: number; total: number }[] = [];
+      await repo.replaceSource(singleResource('guadalajara-2016-eu', 'E-PROGRESS'), (update) => progress.push(update));
+
+      expect(progress).toEqual([
+        { completed: 0, total: 8 }, { completed: 1, total: 8 }, { completed: 2, total: 8 },
+        { completed: 3, total: 8 }, { completed: 4, total: 8 }, { completed: 5, total: 8 },
+        { completed: 6, total: 8 }, { completed: 7, total: 8 }, { completed: 8, total: 8 },
+      ]);
+    });
+
+    it('replaces only the imported source and retains its prior data when a replacement fails', async () => {
     const repo = SqliteCatalogRepository.open(':memory:');
     await repo.replaceSource(singleResource('guadalajara-2016-eu', 'E-ORIGINAL'));
     await repo.replaceSource(singleResource('guadalajara-2016-rm', 'RM-ONLY'));

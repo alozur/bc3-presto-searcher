@@ -11,12 +11,14 @@ type ImportRequest = { databasePath: string; selected: SelectedSource };
 
 port.on('message', async ({ databasePath, selected }: ImportRequest) => {
   try {
-    port.postMessage({ type: 'progress', phase: 'parsing' });
-    const snapshot = parseBc3(selected.bytes, selected.source, selected.displayName);
+    const snapshot = parseBc3(selected.bytes, selected.source, selected.displayName, (progress) => {
+      port.postMessage({ type: 'progress', progress });
+    });
 
-    port.postMessage({ type: 'progress', phase: 'storing' });
     const repository = SqliteCatalogRepository.open(databasePath);
-    await repository.replaceSource(snapshot);
+    await repository.replaceSource(snapshot, (progress) => {
+      port.postMessage({ type: 'progress', progress: { stage: 'storing', ...progress } });
+    });
 
     port.postMessage({
       type: 'completed',
