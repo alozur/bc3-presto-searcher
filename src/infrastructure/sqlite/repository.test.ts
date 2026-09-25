@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GetItemDetail, ImportApprovedSource, SearchCatalog } from '../../application/useCases';
 import { parseBc3 } from '../../domain/bc3/parser';
@@ -49,6 +51,18 @@ describe('SQLite catalog persistence', () => {
         expect.objectContaining({ ordinal: 2, sourceLine: 5, component: { code: 'SYN-TOOL-003', kind: 'resource', description: 'Synthetic tool', unit: 'u', unitPrice: '12' }, factor: '1', yield: '0.1' }),
       ],
     });
+  });
+
+  it('creates an idempotent child-side index for the breakdown component foreign key', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bc3-repository-')), 'catalog.sqlite');
+    SqliteCatalogRepository.open(path);
+    const reopened = SqliteCatalogRepository.open(path);
+    const db = (reopened as unknown as { db: { prepare: (sql: string) => { all: (...params: string[]) => Array<{ name: string }> } } }).db;
+
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='breakdown_lines'").all();
+    expect(indexes.map((index) => index.name)).toContain('breakdown_component_lookup');
+    const columns = db.prepare('PRAGMA index_info(breakdown_component_lookup)').all();
+    expect(columns.map((column) => column.name)).toEqual(['parent_source_key', 'component_code_key']);
   });
 
   it('reports monotonic persistence progress from explicit write operations before committing', async () => {
