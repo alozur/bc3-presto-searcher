@@ -1,47 +1,509 @@
-body { margin: 0; background: #f5f7fa; color: #182230; font-family: system-ui, sans-serif; }
-main { max-width: 70rem; margin: auto; padding: 2rem; }
-header, section { margin-bottom: 1.5rem; padding: 1.25rem; background: white; border: 1px solid #d8dee8; border-radius: .5rem; }
-h1, h2 { margin-top: 0; }
-button, input { margin: .4rem .4rem .4rem 0; padding: .55rem .7rem; font: inherit; }
-button { cursor: pointer; color: #fff; background: #075985; border: 1px solid #075985; border-radius: .25rem; }
-input { min-width: 18rem; border: 1px solid #94a3b8; border-radius: .25rem; }
-.results { padding: 0; list-style: none; }
-.results li { margin: .75rem 0; padding: .75rem; border-left: .25rem solid #0e7490; background: #f8fafc; }
-.results p { margin: .35rem 0; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: .5rem; text-align: left; border-bottom: 1px solid #d8dee8; }
+:root {
+  color-scheme: light;
+  --paper: #f6f5f2;
+  --surface: #ffffff;
+  --surface-sunk: #f2f1ed;
+  --surface-tint: #eef4f5;
+  --ink-strong: #14181d;
+  --ink: #38414e;
+  --ink-muted: #646d7a;
+  --ink-faint: #98a1ac;
+  --line: #e5e3de;
+  --line-strong: #d2cfc8;
+  --accent: #14505f;
+  --accent-strong: #0d3b47;
+  --accent-tint: #e7f0f2;
+  --accent-line: #b9d2d7;
+  --danger: #9b2c2c;
+  --danger-tint: #fdf2f2;
+  --danger-line: #eccfd0;
+  --shadow-sm: 0 1px 2px rgba(20, 24, 29, .05);
+  --shadow-md: 0 1px 2px rgba(20, 24, 29, .05), 0 8px 24px -12px rgba(20, 24, 29, .14);
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: .9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-line);
+}
+
+main {
+  max-width: 68rem;
+  margin-inline: auto;
+  padding: 2.5rem 1.75rem 4rem;
+}
+
+.app-masthead {
+  margin-bottom: 1.75rem;
+}
+
+.app-masthead h1 {
+  margin: 0 0 .35rem;
+  color: var(--ink-strong);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+
+.app-masthead p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: .875rem;
+}
+
+section.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.25rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Signature detail: a 3px rail pinned to the top edge of every panel. */
+section.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), #2a7f95);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+section.panel h2 {
+  margin: 0 0 1rem;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+h3 {
+  margin: 0 0 .25rem;
+  color: var(--ink-strong);
+  font-size: .9375rem;
+  font-weight: 600;
+}
+
+small {
+  display: block;
+  margin-top: .5rem;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+}
+
+button {
+  margin: 0;
+  padding: .55rem 1rem;
+  color: #fff;
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+input {
+  min-width: 18rem;
+  margin: 0;
+  padding: .55rem .75rem;
+  font: inherit;
+  color: var(--ink-strong);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+button:focus-visible,
+input:focus-visible,
+label:focus-visible,
+section[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem 1rem;
+  margin-bottom: .75rem;
+}
+
 .import-completion-sound {
   display: flex;
   align-items: center;
-  gap: .4rem;
+  gap: .5rem;
 }
-/* Neutralise the global `input { min-width: 18rem; ... }` rule: a checkbox must
-   keep its intrinsic size and sit inline with its label. */
+
+/* The global `input { min-width: 18rem; ... }` rule is meant for text fields;
+   a checkbox must keep its small square size and sit inline with its label. */
 .import-completion-sound input {
   min-width: 0;
-  width: auto;
-  margin: .4rem 0 .4rem 0;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent);
 }
+
+.search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .75rem;
+}
+
+label[for="search-query"] {
+  display: block;
+  margin-bottom: .35rem;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+}
+
+#search-query {
+  flex: 1 1 auto;
+  max-width: 26rem;
+}
+
+/* Direct-child paragraphs that are not live regions: the results count and the
+   cancellation notice. Muted meta, so neither reads as stray body copy. */
+section.panel > p:not([role]) {
+  margin: 0 0 .5rem;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The list is its own band: it bleeds one gutter step into the panel padding so the row
+   separators, the hover tint, and the top rule all share the same width. */
+.results {
+  margin: .75rem -1rem 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.results li {
+  margin: 0;
+  padding: 1.125rem 1rem;
+}
+
+.results li + li {
+  border-top: 1px solid var(--line);
+}
+
+.results li:hover,
+.results li:has(button[aria-expanded=true]) {
+  background: var(--surface-sunk);
+}
+
+.results button {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  width: 100%;
+  padding: .25rem 0;
+  color: var(--ink-strong);
+  text-align: left;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.results button:hover:not(:disabled),
+.results button:active:not(:disabled) {
+  background: none;
+  border: 0;
+  transform: none;
+}
+
+/* Chevron drawn with borders: no text content, so nothing is announced. */
+.results button::after {
+  content: '';
+  width: .45rem;
+  height: .45rem;
+  margin-left: auto;
+  border-right: 2px solid var(--ink-faint);
+  border-bottom: 2px solid var(--ink-faint);
+  transform: rotate(45deg);
+  transition: transform .18s ease;
+}
+
+.results button[aria-expanded=true]::after {
+  transform: rotate(225deg);
+}
+
+.result-kind {
+  padding: .1rem .5rem;
+  color: var(--accent);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+}
+
+.result-code {
+  color: var(--ink-strong);
+  font-family: var(--font-mono);
+  font-size: .875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.results p {
+  margin: .5rem 0 0;
+  color: var(--ink);
+  font-size: .9375rem;
+}
+
+/* Result pager. Centred under the list and bleeding one gutter step like the rows, so its
+   closing rule lines up with the row separators instead of stopping short of them. */
+.results-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem 1rem;
+  margin: 0 -1rem;
+  padding: 1.25rem 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+/* A margin on these buttons would break the centring. The base button rule already zeroes
+   it; this keeps the guarantee local to the row. */
+.results-pagination button {
+  margin: 0;
+}
+
+.results-page-status {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-detail {
+  margin-top: 1rem;
+  padding: 1.125rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.result-detail > p:last-of-type {
+  color: var(--ink-muted);
+  font-size: .8125rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.result-detail table {
+  margin-top: .75rem;
+  font-size: .8125rem;
+}
+
+th {
+  padding: .5rem;
+  color: var(--ink-muted);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-align: left;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+td {
+  padding: .5rem;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Order and quantity columns never wrap: a wrapped "26,67 m2/día" reads as two
+   unrelated numbers. The component column keeps wrapping, being prose. */
+td:not(:nth-child(2)) {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+progress {
+  appearance: none;
+  width: 100%;
+  height: .5rem;
+  margin: .75rem 0;
+  overflow: hidden;
+  background: var(--surface-sunk);
+  border: 0;
+  border-radius: 999px;
+}
+
+/* Transparent: the element's own background is the visible track. Animation is driven
+   from the element because Chromium does not run animations on this pseudo-element. */
+progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+progress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--accent), #2a7f95);
+  border-radius: 999px;
+}
+
+progress::-moz-progress-bar {
+  background: linear-gradient(90deg, var(--accent), #2a7f95);
+  border-radius: 999px;
+}
+
+@keyframes progress-sweep {
+  from {
+    background-position: -30% 0, 0 0;
+  }
+
+  to {
+    background-position: 130% 0, 0 0;
+  }
+}
+
+/* An indeterminate stage (validating relations) has no measurable denominator, so the
+   track itself carries the state: a brighter segment sweeping over an always-present
+   accent base. The base guarantees the bar never reads as a flat, dead track even if the
+   animation is suppressed, and the sweeping segment is listed first because the first
+   background layer is painted on top. */
+progress:indeterminate {
+  background-image:
+    linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent),
+    linear-gradient(var(--accent-line), var(--accent-line));
+  background-repeat: no-repeat, no-repeat;
+  background-size: 28% 100%, 100% 100%;
+  animation: progress-sweep 1.3s ease-in-out infinite;
+}
+
+ol[aria-label="Etapas de importación"] {
+  display: grid;
+  gap: .3rem;
+  margin: .5rem 0 0;
+  padding-left: 0;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  list-style: none;
+}
+
+.import-counter {
+  margin: .35rem 0;
+  font-family: var(--font-mono);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.import-elapsed {
+  margin: .35rem 0;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+p[role="status"] {
+  margin: .5rem 0;
+  color: var(--ink-muted);
+  font-size: .8125rem;
+}
+
+div[role="status"] {
+  margin: .75rem 0 0;
+  padding: 1rem 1.25rem;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+}
+
+div[role="status"] p {
+  margin: .25rem 0;
+}
+
+p[role="alert"] {
+  margin: .75rem 0 0;
+  padding: .75rem 1rem;
+  color: var(--danger);
+  background: var(--danger-tint);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius);
+}
+
 .import-diagnostics-panel {
   max-height: 12rem;
+  margin-top: .5rem;
+  padding: .5rem .75rem;
   overflow-y: auto;
   overflow-x: hidden;
   overflow-wrap: anywhere;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
-progress {
-  width: 100%;
-  height: 1.1rem;
-  margin: .4rem 0;
-  accent-color: #075985;
+
+.import-diagnostics-panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
 }
-.import-counter {
-  margin: .35rem 0;
-  font-variant-numeric: tabular-nums;
+
+.import-diagnostics-panel li {
+  color: var(--ink-muted);
+  font-size: .8125rem;
 }
-.import-elapsed {
-  margin: .35rem 0;
-  color: #475569;
+
+.import-diagnostics-panel li::marker {
+  color: var(--accent);
 }
+
 .import-milestones {
   max-height: 12rem;
   margin: .5rem 0;
@@ -49,35 +511,65 @@ progress {
      padding-inline-start the list markers are painted into, and overflow-x:
      hidden would then clip them. */
   padding: .5rem .75rem .5rem 1.75rem;
-  border: 1px solid #d8dee8;
-  border-radius: .5rem;
-  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
   overflow-y: auto;
   overflow-x: hidden;
   overflow-wrap: anywhere;
 }
-.import-milestones li { margin: .25rem 0; }
 
-/* Result pager. Self-contained so a later renderer restyle can re-adopt it. */
-.results-pagination {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: .75rem 1rem;
-  margin-top: 1rem;
-}
-/* The global button rule right-pads every button; inside the centred flex row
-   that trailing margin would break the centring. */
-.results-pagination button {
-  margin: 0;
-}
-.results-pagination button:disabled {
-  cursor: not-allowed;
-  opacity: .55;
-}
-.results-page-status {
-  margin: 0;
-  color: #475569;
+.import-milestones li {
+  margin: .25rem 0;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: .8125rem;
   font-variant-numeric: tabular-nums;
+}
+
+.import-milestones li::marker {
+  color: var(--accent);
+}
+
+.import-diagnostics-panel,
+.import-milestones {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.import-diagnostics-panel::-webkit-scrollbar,
+.import-milestones::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.import-diagnostics-panel::-webkit-scrollbar-thumb,
+.import-milestones::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.import-diagnostics-panel::-webkit-scrollbar-track,
+.import-milestones::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  #search-query {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
 }
