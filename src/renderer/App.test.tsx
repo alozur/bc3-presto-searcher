@@ -123,7 +123,11 @@ describe('Presto catalog screen', () => {
     const importButton = container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement;
 
     await act(async () => click(importButton));
-    expect(loadingStatus()?.textContent).toBe('Importación en curso. Esperando la selección del archivo BC3.');
+    expect(loadingStatus()).toBeNull();
+    expect(container.querySelector('progress')).toBeNull();
+    expect(container.textContent).not.toContain('Importación en curso.');
+    expect(container.textContent).not.toContain('Tiempo transcurrido:');
+    expect(container.querySelector('[aria-label="Etapas de importación"]')).toBeNull();
     expect(importButton.disabled).toBe(true);
     const input = container.querySelector('input')!;
     const searchButton = container.querySelector('button[aria-label="Buscar"]') as HTMLButtonElement;
@@ -134,7 +138,8 @@ describe('Presto catalog screen', () => {
     expect(api.search).toHaveBeenCalledWith({ query: 'barniz' });
 
     await act(async () => reportProgress?.({ stage: 'processing-records', completed: 4, total: 4 }));
-    expect(loadingStatus()?.textContent).toContain('Procesando registros BC3: 100 %');
+    expect(loadingStatus()?.textContent).toBe('Importación en curso. Procesando registros BC3: 100 %');
+    expect(container.querySelector('progress')).toBeTruthy();
     await act(async () => reportProgress?.({ stage: 'validating-relations' }));
     expect(loadingStatus()?.textContent).toContain('Validando relaciones del catálogo…');
     expect(container.querySelector('[aria-label="Etapas de importación"]')?.textContent).toContain('Procesando registros BC3: 100 %: Completado.');
@@ -252,6 +257,7 @@ describe('Presto catalog screen', () => {
     const { api, controllers } = pendingImportApi();
     await render(api);
     await act(async () => click(container.querySelector('button[aria-label="Importar catálogo"]') as HTMLButtonElement));
+    await act(async () => controllers.report?.({ stage: 'processing-records', completed: 1, total: 100 }));
     expect(container.textContent).toMatch(/Tiempo transcurrido: \d+ s/);
     await act(async () => controllers.complete?.({ status: 'cancelled' }));
     expect(container.textContent).not.toContain('Tiempo transcurrido:');

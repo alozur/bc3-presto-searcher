@@ -103,6 +103,53 @@ Non-blocking findings left as follow-ups:
 - `src/shared/ipc.test.ts` pins "no global percentage" only nominally, via
   `toHaveLength(3)`, rather than behaviorally.
 
+## Work unit 3: missing breakdown component index (performance)
+
+User report: a re-import ran for over 25 minutes and appeared stuck at 0 %.
+
+Root cause found by measuring the running process and the real database rather
+than theorising: the process was at 87 % CPU with the WAL growing ~96 KB/s, so it
+was working, not deadlocked. `breakdown_lines` declares
+`FOREIGN KEY(parent_source_key, component_code_key) REFERENCES items(source_key, code_key)`
+with no child-side index. SQLite full-scans the child table for every deleted
+parent row, so `DELETE FROM items WHERE source_key = ?` over 68,054 parents and
+195,975 child rows is about 13.3 billion row visits.
+
+Confirmed against the real database: the only indexes present were the PRIMARY
+KEY autoindexes plus `token_lookup`.
+
+Measured: 27M row visits took 3,014 ms without the index and 243 ms with it. The
+real re-import delete extrapolates to ~24.8 minutes, matching the observed run.
+A fresh import into an empty database is only ~32 s of real work.
+
+This was pre-existing, not caused by the progress work: the re-import path was
+always quadratic and the previous UI simply had no percentage to reveal it.
+
+Fix: one idempotent `CREATE INDEX IF NOT EXISTS breakdown_component_lookup` in
+`migrate()`. The progress denominator was deliberately left alone, per the user's
+explicit choice.
+
+Verified end to end on a pre-existing populated database: the index appears on
+open, existing rows survive, and the equivalent delete drops to 68 ms.
+
+## Work unit 4: import panel shown before the file was chosen (UX)
+
+User report: the loading information appears as soon as the button is clicked,
+while the native file dialog still covers the window.
+
+The panel once again renders only when a real progress event exists, gated on
+`importActivity.progress !== null`. The button stays disabled for the whole
+pending window so a second dialog cannot open, and search stays usable.
+
+Known residual: after the file is chosen there is roughly 0.6 s with no feedback
+while the 26.6 MB payload is decoded and split before the first event. Removing
+that gap would need a new main-to-renderer signal when the dialog closes.
+
+## Review workload
+
+Work unit 3: 2 files, +18/-2. Work unit 4: 3 files, +12/-3. Branch total vs
+`main` is 17 files, +594/-42.
+
 ## Allowed edit surfaces
 
 - `src/electron/progressThrottle.ts` (new)

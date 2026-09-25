@@ -232,7 +232,7 @@ export function App() {
     <section aria-labelledby="import-title">
       <h2 id="import-title">Importar catálogo</h2>
       <button aria-label="Importar catálogo" disabled={importing} onClick={importCatalog}>Seleccionar archivo BC3 aprobado</button>
-      {importActivity.status === 'pending' && <>
+      {importActivity.status === 'pending' && importActivity.progress !== null && <>
           <p role="status">Importación en curso. {progressMessage(importActivity.progress)}</p>
           {(() => {
             const { progress, milestones } = importActivity;
