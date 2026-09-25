@@ -73,9 +73,10 @@ describe('SQLite catalog persistence', () => {
       await repo.replaceSource(singleResource('guadalajara-2016-eu', 'E-PROGRESS'), (update) => progress.push(update));
 
       expect(progress).toEqual([
-        { completed: 0, total: 8 }, { completed: 1, total: 8 }, { completed: 2, total: 8 },
-        { completed: 3, total: 8 }, { completed: 4, total: 8 }, { completed: 5, total: 8 },
-        { completed: 6, total: 8 }, { completed: 7, total: 8 }, { completed: 8, total: 8 },
+        { completed: 0, total: 9 }, { completed: 1, total: 9 }, { completed: 2, total: 9 },
+        { completed: 3, total: 9 }, { completed: 4, total: 9 }, { completed: 5, total: 9 },
+        { completed: 6, total: 9 }, { completed: 7, total: 9 }, { completed: 8, total: 9 },
+        { completed: 9, total: 9 },
       ]);
     });
 
@@ -99,6 +100,7 @@ describe('SQLite catalog persistence', () => {
           component: { code: 'MISSING', kind: 'resource', description: 'Missing', unit: 'u', unitPrice: '1' },
         },
       }],
+      entities: [],
       diagnostics: [],
     };
 
@@ -110,6 +112,36 @@ describe('SQLite catalog persistence', () => {
     expect(await repo.getDetail({ source: 'guadalajara-2016-eu', codeKey: 'e-original' })).toBeNull();
     expect(await repo.getDetail({ source: 'guadalajara-2016-eu', codeKey: 'e-replacement' })).not.toBeNull();
     expect(await repo.getDetail({ source: 'guadalajara-2016-rm', codeKey: 'rm-only' })).not.toBeNull();
+  });
+
+  it('persists and replaces source entity rows without deleting another source\'s entities', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bc3-repository-')), 'catalog.sqlite');
+    const repo = SqliteCatalogRepository.open(path);
+    const withEntities = (source: SourceKey): ImportSnapshot => parseBc3(
+      new TextEncoder().encode('~C|E-1|u|Recurso|1|x|0|\n~E|PROV-A|Proveedor A|CIF-A|\n~E|PROV-B|Proveedor B|CIF-B|\n'),
+      source,
+      `${source}.bc3`,
+    );
+    const db = new Database(path);
+    const rows = () => db.prepare('SELECT source_key, line, code, name, fields_json FROM source_entities ORDER BY source_key, line').all() as Array<{ source_key: string; line: number; code: string; name: string; fields_json: string }>;
+
+    void repo.replaceSource(withEntities('guadalajara-2016-eu'));
+    void repo.replaceSource(withEntities('guadalajara-2016-rm'));
+    expect(rows()).toEqual([
+      { source_key: 'guadalajara-2016-eu', line: 2, code: 'PROV-A', name: 'Proveedor A', fields_json: JSON.stringify(['PROV-A', 'Proveedor A', 'CIF-A', '']) },
+      { source_key: 'guadalajara-2016-eu', line: 3, code: 'PROV-B', name: 'Proveedor B', fields_json: JSON.stringify(['PROV-B', 'Proveedor B', 'CIF-B', '']) },
+      { source_key: 'guadalajara-2016-rm', line: 2, code: 'PROV-A', name: 'Proveedor A', fields_json: JSON.stringify(['PROV-A', 'Proveedor A', 'CIF-A', '']) },
+      { source_key: 'guadalajara-2016-rm', line: 3, code: 'PROV-B', name: 'Proveedor B', fields_json: JSON.stringify(['PROV-B', 'Proveedor B', 'CIF-B', '']) },
+    ]);
+
+    void repo.replaceSource(parseBc3(
+      new TextEncoder().encode('~C|E-1|u|Recurso|1|x|0|\n~E|PROV-C|Proveedor C|\n'),
+      'guadalajara-2016-eu',
+      'eu.bc3',
+    ));
+    const after = rows();
+    expect(after.filter((row) => row.source_key === 'guadalajara-2016-eu').map((row) => row.code)).toEqual(['PROV-C']);
+    expect(after.filter((row) => row.source_key === 'guadalajara-2016-rm').map((row) => row.code)).toEqual(['PROV-A', 'PROV-B']);
   });
 
   const sourceColumns = (path: string) => new Database(path).prepare('PRAGMA table_info(sources)').all() as { name: string }[];

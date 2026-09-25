@@ -7,7 +7,8 @@ export type BreakdownLine = { ordinal:number; sourceLine:number; component:{code
 export type ItemDetail = {kind:'partida';item:CatalogItem;breakdown:readonly BreakdownLine[]} | {kind:'resource';item:CatalogItem};
 export type ImportDiagnostic = {code:string;sourceDisplayName:string;line:number;recordTag?:string;messageEs:string;parentCode?:string;childCode?:string};
 export type UnresolvedChildDiagnostic = ImportDiagnostic & {code:'unresolved-child';recordTag:'D';parentCode:string;childCode:string};
-export type ImportSnapshot = {source:SourceKey;sourceDisplayName:string;contentHash?:string;items:readonly CatalogItem[];breakdowns:readonly {parent:ItemRef;line:BreakdownLine}[];diagnostics:readonly ImportDiagnostic[]};
+export type SourceEntity = { line:number; code:string; name:string; fields:readonly string[] };
+export type ImportSnapshot = {source:SourceKey;sourceDisplayName:string;contentHash?:string;items:readonly CatalogItem[];breakdowns:readonly {parent:ItemRef;line:BreakdownLine}[];entities:readonly SourceEntity[];diagnostics:readonly ImportDiagnostic[]};
 export type SearchCandidate = CatalogItem & {fieldCounts:{description:number;keywords:number;code:number;expandedText:number};exactCode:boolean};
 export type SearchResponse = {status:'ok';items:readonly SearchCandidate[]}|{status:'empty-query'};
 export function codeKey(code:string){return code.trim().toLocaleLowerCase('es');}
